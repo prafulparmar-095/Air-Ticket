@@ -1,40 +1,60 @@
-const mongoose = require('mongoose');
+const mongoose = require('mongoose')
+const bcrypt = require('bcryptjs')
 
-const UserSchema = new mongoose.Schema({
+const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    trim: true,
-    maxlength: 50
+    trim: true
   },
   email: {
     type: String,
     required: true,
     unique: true,
     lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    trim: true
   },
   password: {
     type: String,
     required: true,
     minlength: 6
   },
-  role: {
+  phone: {
     type: String,
-    default: 'user',
-    enum: ['user', 'admin']
+    trim: true
   },
-  date: {
-    type: Date,
-    default: Date.now
-  }
-});
+  dateOfBirth: {
+    type: Date
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  verificationToken: String,
+  resetPasswordToken: String,
+  resetPasswordExpires: Date
+}, {
+  timestamps: true
+})
 
-// Remove password field when converting to JSON
-UserSchema.methods.toJSON = function() {
-  const user = this.toObject();
-  delete user.password;
-  return user;
-};
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next()
+  this.password = await bcrypt.hash(this.password, 12)
+  next()
+})
 
-module.exports = mongoose.model('User', UserSchema);
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password)
+}
+
+userSchema.virtual('bookings', {
+  ref: 'Booking',
+  localField: '_id',
+  foreignField: 'user'
+})
+
+module.exports = mongoose.model('User', userSchema)

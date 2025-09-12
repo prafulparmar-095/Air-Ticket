@@ -1,63 +1,46 @@
-const express = require('express');
-const { body, validationResult } = require('express-validator');
-const Flight = require('../models/Flight');
+const express = require('express')
+const Flight = require('../models/Flight')
+const router = express.Router()
 
-const router = express.Router();
-
-// Get all flights with optional filtering
+// Get all flights
 router.get('/', async (req, res) => {
   try {
-    const { from, to, departure, page = 1, limit = 10 } = req.query;
-    
-    let query = {};
-    
-    if (from) query['departure.city'] = new RegExp(from, 'i');
-    if (to) query['arrival.city'] = new RegExp(to, 'i');
-    if (departure) {
-      const startDate = new Date(departure);
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 1);
-      
-      query['departure.time'] = { $gte: startDate, $lt: endDate };
-    }
-    
-    const options = {
-      page: parseInt(page),
-      limit: parseInt(limit),
-      sort: { 'departure.time': 1 }
-    };
-    
-    const flights = await Flight.find(query)
-      .limit(options.limit * 1)
-      .skip((options.page - 1) * options.limit)
-      .sort(options.sort);
-    
-    const total = await Flight.countDocuments(query);
-    
-    res.json({
-      flights,
-      totalPages: Math.ceil(total / options.limit),
-      currentPage: options.page,
-      total
-    });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
+    const flights = await Flight.find({ available: true })
+    res.json(flights)
+  } catch (error) {
+    console.error('Get flights error:', error)
+    res.status(500).json({ message: 'Server error' })
   }
-});
+})
 
-// Get single flight
-router.get('/:id', async (req, res) => {
+// Search flights
+router.get('/search', async (req, res) => {
   try {
-    const flight = await Flight.findById(req.params.id);
-    if (!flight) {
-      return res.status(404).json({ message: 'Flight not found' });
-    }
-    res.json(flight);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
-  }
-});
+    const { origin, destination, departureDate } = req.query
 
-module.exports = router;
+    if (!origin || !destination) {
+      return res.status(400).json({ message: 'Origin and destination are required' })
+    }
+
+    let query = {
+      origin: new RegExp(origin, 'i'),
+      destination: new RegExp(destination, 'i'),
+      available: true
+    }
+
+    if (departureDate) {
+      const startDate = new Date(departureDate)
+      const endDate = new Date(startDate)
+      endDate.setDate(endDate.getDate() + 1)
+      query.departureTime = { $gte: startDate, $lt: endDate }
+    }
+
+    const flights = await Flight.find(query).sort({ departureTime: 1 })
+    res.json(flights)
+  } catch (error) {
+    console.error('Search flights error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+module.exports = router

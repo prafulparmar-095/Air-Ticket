@@ -1,125 +1,97 @@
-import React, { useState } from 'react';
+// frontend/src/components/Header.jsx
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     navigate('/');
-    setIsProfileDropdownOpen(false);
   };
 
   return (
-    <header className="bg-blue-600 text-white shadow-lg">
-      <div className="container mx-auto px-4 py-3">
+    <header className="bg-white shadow-md">
+      <div className="container mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
           <Link to="/" className="flex items-center space-x-2">
-            <div className="bg-white text-blue-600 p-2 rounded-lg">
-              <i className="fas fa-plane text-xl"></i>
-            </div>
-            <span className="text-xl font-bold">SkyBook</span>
+            <svg className="w-8 h-8 text-blue-600" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11.43a1 1 0 01.725-.962l5-1.429a1 1 0 001.17-1.409l-7-14z"></path>
+            </svg>
+            <span className="text-xl font-bold text-blue-600">SkyBooker</span>
           </Link>
 
-          <div className="hidden md:flex items-center space-x-6">
-            <Link to="/" className="hover:text-blue-200 transition">Home</Link>
-            <Link to="/search" className="hover:text-blue-200 transition">Flights</Link>
-            {user && user.role === 'admin' && (
-              <Link to="/admin" className="hover:text-blue-200 transition">Admin</Link>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-4">
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center space-x-8">
+            <Link to="/" className="text-gray-700 hover:text-blue-600 font-medium">Home</Link>
+            
             {user ? (
-              <div className="relative">
-                <button 
-                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                  className="flex items-center space-x-2 focus:outline-none"
-                >
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                    <i className="fas fa-user"></i>
-                  </div>
-                  <span>{user.name}</span>
-                  <i className={`fas fa-chevron-down text-xs transition-transform ${isProfileDropdownOpen ? 'rotate-180' : ''}`}></i>
-                </button>
-
-                {isProfileDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 text-gray-800 z-50">
-                    <Link 
-                      to="/profile" 
-                      className="block px-4 py-2 hover:bg-gray-100"
-                      onClick={() => setIsProfileDropdownOpen(false)}
-                    >
-                      <i className="fas fa-user mr-2"></i>Profile
-                    </Link>
-                    <button 
-                      onClick={handleLogout} 
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
-                    >
-                      <i className="fas fa-sign-out-alt mr-2"></i>Logout
-                    </button>
-                  </div>
+              <>
+                <Link to="/profile" className="text-gray-700 hover:text-blue-600 font-medium">My Bookings</Link>
+                {user.role === 'admin' && (
+                  <Link to="/admin" className="text-gray-700 hover:text-blue-600 font-medium">Admin</Link>
                 )}
-              </div>
+                <div className="flex items-center space-x-4">
+                  <span className="text-gray-700">Hello, {user.name}</span>
+                  <button 
+                    onClick={handleLogout}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </>
             ) : (
-              <div className="flex space-x-2">
-                <Link to="/login" className="px-4 py-2 rounded hover:bg-blue-500 transition">
-                  <i className="fas fa-sign-in-alt mr-2"></i>Login
-                </Link>
-                <Link to="/register" className="px-4 py-2 bg-white text-blue-600 rounded hover:bg-gray-100 transition">
-                  <i className="fas fa-user-plus mr-2"></i>Register
-                </Link>
+              <div className="flex items-center space-x-4">
+                <Link to="/login" className="text-gray-700 hover:text-blue-600 font-medium">Login</Link>
+                <Link to="/register" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">Sign Up</Link>
               </div>
             )}
+          </nav>
 
-            <button 
-              className="md:hidden text-xl"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-            >
-              <i className={`fas ${isMenuOpen ? 'fa-times' : 'fa-bars'}`}></i>
-            </button>
-          </div>
+          {/* Mobile menu button */}
+          <button 
+            className="md:hidden focus:outline-none"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+            </svg>
+          </button>
         </div>
 
-        {/* Mobile menu */}
+        {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="md:hidden mt-4 py-2 border-t border-blue-500">
-            <div className="flex flex-col space-y-3">
-              <Link to="/" className="px-2 py-1 hover:bg-blue-500 rounded" onClick={() => setIsMenuOpen(false)}>
-                <i className="fas fa-home mr-2"></i>Home
-              </Link>
-              <Link to="/search" className="px-2 py-1 hover:bg-blue-500 rounded" onClick={() => setIsMenuOpen(false)}>
-                <i className="fas fa-plane mr-2"></i>Flights
-              </Link>
-              {user && user.role === 'admin' && (
-                <Link to="/admin" className="px-2 py-1 hover:bg-blue-500 rounded" onClick={() => setIsMenuOpen(false)}>
-                  <i className="fas fa-cog mr-2"></i>Admin
-                </Link>
-              )}
+          <div className="md:hidden mt-4 py-4 border-t border-gray-200">
+            <nav className="flex flex-col space-y-4">
+              <Link to="/" className="text-gray-700 hover:text-blue-600 font-medium">Home</Link>
+              
               {user ? (
                 <>
-                  <Link to="/profile" className="px-2 py-1 hover:bg-blue-500 rounded" onClick={() => setIsMenuOpen(false)}>
-                    <i className="fas fa-user mr-2"></i>Profile
-                  </Link>
-                  <button onClick={handleLogout} className="text-left px-2 py-1 hover:bg-blue-500 rounded">
-                    <i className="fas fa-sign-out-alt mr-2"></i>Logout
-                  </button>
+                  <Link to="/profile" className="text-gray-700 hover:text-blue-600 font-medium">My Bookings</Link>
+                  {user.role === 'admin' && (
+                    <Link to="/admin" className="text-gray-700 hover:text-blue-600 font-medium">Admin</Link>
+                  )}
+                  <div className="pt-4 border-t border-gray-200">
+                    <span className="block text-gray-700 mb-2">Hello, {user.name}</span>
+                    <button 
+                      onClick={handleLogout}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full"
+                    >
+                      Logout
+                    </button>
+                  </div>
                 </>
               ) : (
-                <>
-                  <Link to="/login" className="px-2 py-1 hover:bg-blue-500 rounded" onClick={() => setIsMenuOpen(false)}>
-                    <i className="fas fa-sign-in-alt mr-2"></i>Login
-                  </Link>
-                  <Link to="/register" className="px-2 py-1 hover:bg-blue-500 rounded" onClick={() => setIsMenuOpen(false)}>
-                    <i className="fas fa-user-plus mr-2"></i>Register
-                  </Link>
-                </>
+                <div className="flex flex-col space-y-4 pt-4 border-t border-gray-200">
+                  <Link to="/login" className="text-gray-700 hover:text-blue-600 font-medium text-center">Login</Link>
+                  <Link to="/register" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-center">Sign Up</Link>
+                </div>
               )}
-            </div>
+            </nav>
           </div>
         )}
       </div>

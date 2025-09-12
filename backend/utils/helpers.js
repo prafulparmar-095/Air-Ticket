@@ -1,34 +1,28 @@
-// Format date
-const formatDate = (date) => {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-};
-
-// Format currency
-const formatCurrency = (amount, currency = 'INR') => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: currency
-  }).format(amount);
-};
-
-// Generate random string
-const generateRandomString = (length = 8) => {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length));
+const generateBookingReference = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = ''
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
-  return result;
-};
+  return result
+}
 
-// Validate email
-const validateEmail = (email) => {
-  const re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-  return re.test(String(email).toLowerCase());
-};
+const formatFlightDuration = (departure, arrival) => {
+  const diff = new Date(arrival) - new Date(departure)
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  return `${hours}h ${minutes}m`
+}
 
-module.exports = { formatDate, formatCurrency, generateRandomString, validateEmail };
+const calculateFlightPrice = (basePrice, travelClass, passengers) => {
+  let multiplier = 1
+  if (travelClass === 'business') multiplier = 1.5
+  if (travelClass === 'first') multiplier = 2.5
+  return basePrice * multiplier * passengers
+}
+
+module.exports = {
+  generateBookingReference,
+  formatFlightDuration,
+  calculateFlightPrice
+}

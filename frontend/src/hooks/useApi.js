@@ -1,29 +1,18 @@
-import { useState } from 'react';
-import axios from 'axios';
+import axios from 'axios'
 
 export const useApi = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const api = axios.create({
+    baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  })
 
-  const callApi = async (apiCall) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await apiCall();
-      return response.data;
-    } catch (err) {
-      const message = err.response?.data?.message || 'An error occurred';
-      setError(message);
-      throw new Error(message);
-    } finally {
-      setLoading(false);
+  // Add token to requests
+  api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
     }
-  };
+    return config
+  })
 
-  return {
-    loading,
-    error,
-    callApi
-  };
-};
+  return api
+}

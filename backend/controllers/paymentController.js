@@ -1,71 +1,129 @@
-const Booking = require('../models/Booking');
+// backend/controllers/paymentController.js
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const Payment = require('../models/Payment');
 
 // Create payment intent
-const createPaymentIntent = async (req, res) => {
+exports.createPaymentIntent = async (req, res) => {
   try {
-    const { amount, currency, metadata } = req.body;
-
-    // Simulate payment processing
-    const clientSecret = 'simulated_client_secret_' + Date.now();
+    const { amount, currency } = req.body;
     
-    res.json({ clientSecret, amount, currency });
+    // Create a PaymentIntent with the order amount and currency
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount,
+      currency: currency,
+      automatic_payment_methods: {
+        enabled: true,
+      },
+      metadata: {
+        userId: req.user.id.toString()
+      }
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret
+      }
+    });
   } catch (error) {
-    console.error('Error creating payment intent:', error);
-    res.status(500).json({ message: 'Failed to create payment intent' });
+    console.error('Payment intent error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating payment intent',
+      error: error.message
+    });
   }
 };
 
-// Handle webhook
-const handleWebhook = async (req, res) => {
+// Handle successful payment
+exports.handlePaymentSuccess = async (req, res) => {
   try {
-    // Simulate webhook handling
-    const event = {
-      type: 'payment_intent.succeeded',
-      data: { object: { id: 'simulated_payment_' + Date.now(), metadata: req.body.metadata || {} } }
-    };
+    const { paymentIntentId, bookingId, amount } = req.body;
+    
+    // Retrieve payment intent from Stripe
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    
+    // Create payment record
+    const payment = new Payment({
+      user: req.user.id,
+      booking: bookingId,
+      paymentIntentId,
+      amount,
+      currency: paymentIntent.currency,
+      status: paymentIntent.status
+    });
+    
+    await payment.save();
+    
+    res.json({
+      success: true,
+      data: payment
+    });
+  } catch (error) {
+    console.error('Payment success handling error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing payment',
+      error: error.message
+    });
+  }
+};
 
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        const paymentIntent = event.data.object;
-        console.log('Payment successful:', paymentIntent.id);
-        
-        try {
-          await Booking.findOneAndUpdate(
-            { _id: paymentIntent.metadata.bookingId },
-            { status: 'confirmed', paymentId: paymentIntent.id, paidAt: new Date() }
-          );
-          console.log('Booking confirmed:', paymentIntent.metadata.bookingId);
-        } catch (error) {
-          console.error('Error updating booking:', error);
-        }
-        break;
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
+// Get payment history for user
+exports.getPaymentHistory = async (req, res) => {
+  try {
+    const payments = await Payment.find({ user: req.user.id })
+      .populate('booking')
+      .sort({ createdAt: -1 });
+    
+    res.json({
+      success: true,
+      count: payments.length,
+      data: payments
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
+  }
+};
+
+// Refund payment (admin only)
+exports.refundPayment = async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
     }
-
-    res.json({ received: true });
-  } catch (err) {
-    console.error('Webhook error:', err.message);
-    res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-};
-
-// Get payment details
-const getPayment = async (req, res) => {
-  try {
-    const paymentDetails = {
-      id: req.params.paymentId,
-      status: 'succeeded',
-      amount: 1000,
-      currency: 'inr',
-      created: new Date().toISOString()
-    };
     
-    res.json(paymentDetails);
+    // Create refund with Stripe
+    const refund = await stripe.refunds.create({
+      payment_intent: payment.paymentIntentId
+    });
+    
+    // Update payment status
+    payment.status = 'refunded';
+    payment.refundId = refund.id;
+    await payment.save();
+    
+    res.json({
+      success: true,
+      message: 'Payment refunded successfully',
+      data: payment
+    });
   } catch (error) {
-    console.error('Error retrieving payment:', error);
-    res.status(500).json({ message: 'Failed to retrieve payment details' });
+    console.error('Refund error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing refund',
+      error: error.message
+    });
   }
 };
-
-module.exports = { createPaymentIntent, handleWebhook, getPayment };

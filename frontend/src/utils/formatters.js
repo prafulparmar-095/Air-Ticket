@@ -1,30 +1,29 @@
-export const formatDate = (dateString, options = {}) => {
-  const defaultOptions = {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  };
-  
-  return new Date(dateString).toLocaleDateString('en-US', { ...defaultOptions, ...options });
-};
-
-export const formatTime = (dateString) => {
-  return new Date(dateString).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-};
-
-export const formatCurrency = (amount, currency = 'INR') => {
-  return new Intl.NumberFormat('en-IN', {
+export const formatCurrency = (amount, currency = 'USD') => {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency
-  }).format(amount);
-};
+  }).format(amount)
+}
 
-export const truncateText = (text, maxLength = 50) => {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-};
+export const formatDate = (date, options = {}) => {
+  const defaultOptions = { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric',
+    ...options 
+  }
+  return new Date(date).toLocaleDateString('en-US', defaultOptions)
+}
+
+export const formatTime = (date) => {
+  return new Date(date).toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
+}
+
+export const formatDuration = (minutes) => {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return `${hours}h ${mins}m`
+}

@@ -1,266 +1,257 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
-import Payment from '../components/Payment';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { useState, useEffect } from 'react'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
+import { useApi } from '../hooks/useApi'
+import Payment from '../components/Payment'
+import LoadingSpinner from '../components/LoadingSpinner'
+import { formatDate, formatTime, formatDuration, formatCurrency } from '../utils/formatters'
+import { toast } from 'react-toastify'
 
 const Booking = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const [flight, setFlight] = useState(null);
-  const [passengers, setPassengers] = useState([{ name: '', age: '', gender: '' }]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [booking, setBooking] = useState(null);
-  const [showPayment, setShowPayment] = useState(false);
+  const { flightId } = useParams()
+  const [searchParams] = useSearchParams()
+  const passengersCount = parseInt(searchParams.get('passengers') || '1')
+  const { user } = useAuth()
+  const api = useApi()
+  const navigate = useNavigate()
+
+  const [flight, setFlight] = useState(null)
+  const [passengers, setPassengers] = useState([])
+  const [selectedClass, setSelectedClass] = useState('economy')
+  const [loading, setLoading] = useState(true)
+  const [booking, setBooking] = useState(null)
+  const [step, setStep] = useState(1) // 1: Passenger details, 2: Payment
 
   useEffect(() => {
     const fetchFlight = async () => {
       try {
-        const response = await axios.get(`/api/flights/${id}`);
-        setFlight(response.data);
+        const response = await api.get(`/flights/${flightId}`)
+        setFlight(response.data)
+        
+        // Initialize passengers array
+        const initialPassengers = Array(passengersCount).fill().map(() => ({
+          firstName: '',
+          lastName: '',
+          dateOfBirth: '',
+          gender: '',
+          passportNumber: '',
+          nationality: ''
+        }))
+        setPassengers(initialPassengers)
       } catch (error) {
-        console.error('Error fetching flight:', error);
-        setError('Flight not found');
+        console.error('Failed to fetch flight:', error)
+        toast.error('Failed to load flight details')
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    fetchFlight();
-  }, [id]);
+    fetchFlight()
+  }, [flightId, passengersCount])
 
   const handlePassengerChange = (index, field, value) => {
-    const updatedPassengers = [...passengers];
-    updatedPassengers[index][field] = value;
-    setPassengers(updatedPassengers);
-  };
+    const updatedPassengers = [...passengers]
+    updatedPassengers[index][field] = value
+    setPassengers(updatedPassengers)
+  }
 
-  const addPassenger = () => {
-    setPassengers([...passengers, { name: '', age: '', gender: '' }]);
-  };
-
-  const removePassenger = (index) => {
-    if (passengers.length > 1) {
-      const updatedPassengers = [...passengers];
-      updatedPassengers.splice(index, 1);
-      setPassengers(updatedPassengers);
-    }
-  };
-
-  const handleBookingSubmit = async (e) => {
-    e.preventDefault();
-    
+  const handleCreateBooking = async () => {
     if (!user) {
-      navigate('/login');
-      return;
+      toast.error('Please login to continue with booking')
+      navigate('/login', { state: { from: window.location.pathname } })
+      return
     }
-
-    // Validate passengers
-    for (let i = 0; i < passengers.length; i++) {
-      const passenger = passengers[i];
-      if (!passenger.name || !passenger.age || !passenger.gender) {
-        setError(`Please fill all details for passenger ${i + 1}`);
-        return;
-      }
-    }
-
-    setSubmitting(true);
-    setError('');
 
     try {
-      const response = await axios.post('/api/bookings', {
-        flightId: id,
-        passengers: passengers.map(p => ({
-          name: p.name,
-          age: parseInt(p.age),
-          gender: p.gender
-        }))
-      });
-
-      setBooking(response.data);
-      setShowPayment(true);
+      const response = await api.post('/bookings', {
+        flightId,
+        passengers,
+        class: selectedClass,
+        totalAmount: flight.price * passengers.length
+      })
+      
+      setBooking(response.data)
+      setStep(2)
     } catch (error) {
-      const message = error.response?.data?.message || 'Booking failed';
-      setError(message);
-    } finally {
-      setSubmitting(false);
+      console.error('Failed to create booking:', error)
+      toast.error('Failed to create booking')
     }
-  };
+  }
 
-  const handlePaymentSuccess = (paymentIntent) => {
-    navigate('/profile', { 
+  const handlePaymentSuccess = (payment) => {
+    toast.success('Payment successful! Your booking is confirmed.')
+    navigate('/payment-success', { 
       state: { 
-        message: 'Booking confirmed successfully!',
-        paymentId: paymentIntent.id
+        bookingId: booking._id,
+        paymentId: payment._id 
       } 
-    });
-  };
-
-  const handlePaymentCancel = () => {
-    setShowPayment(false);
-    setBooking(null);
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
-  };
-
-  const formatTime = (dateString) => {
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-  };
+    })
+  }
 
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-center items-center h-64">
-          <LoadingSpinner />
-        </div>
+        <LoadingSpinner />
       </div>
-    );
+    )
   }
 
-  if (error || !flight) {
+  if (!flight) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          {error || 'Flight not found'}
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-red-600">Flight not found</h2>
+          <p className="text-gray-600">The requested flight could not be found.</p>
         </div>
       </div>
-    );
-  }
-
-  const totalPrice = flight.price * passengers.length;
-
-  if (showPayment && booking) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6">Complete Payment</h1>
-          <Payment 
-            booking={booking} 
-            onSuccess={handlePaymentSuccess}
-            onCancel={handlePaymentCancel}
-          />
-        </div>
-      </div>
-    );
+    )
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">Complete Your Booking</h1>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Flight Details</h2>
-              
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-semibold">{flight.airline}</h3>
-                    <p className="text-sm text-gray-600">{flight.flightNumber}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-blue-600">₹{flight.price}</p>
-                    <p className="text-sm text-gray-600">per person</p>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold">{formatTime(flight.departure.time)}</p>
-                    <p className="text-sm text-gray-600">{flight.departure.city} ({flight.departure.code})</p>
-                    <p className="text-xs text-gray-500">{formatDate(flight.departure.time)}</p>
-                  </div>
-                  
-                  <div className="flex-1 px-4">
-                    <div className="flex items-center">
-                      <div className="flex-1 border-t border-gray-300"></div>
-                      <div className="px-2 text-sm text-gray-600">{flight.duration}</div>
-                      <div className="flex-1 border-t border-gray-300"></div>
-                    </div>
-                    <div className="text-center text-xs text-gray-500">Non-stop</div>
-                  </div>
-                  
-                  <div className="text-center">
-                    <p className="text-2xl font-bold">{formatTime(flight.arrival.time)}</p>
-                    <p className="text-sm text-gray-600">{flight.arrival.city} ({flight.arrival.code})</p>
-                    <p className="text-xs text-gray-500">{formatDate(flight.arrival.time)}</p>
-                  </div>
-                </div>
+        <h1 className="text-3xl font-bold mb-8">Complete Your Booking</h1>
+
+        {/* Progress Steps */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div className={`flex items-center ${step >= 1 ? 'text-primary-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
+                step >= 1 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'
+              }`}>
+                1
               </div>
+              <span className="ml-2 font-medium">Passenger Details</span>
             </div>
             
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Passenger Details</h2>
-              
-              {!user ? (
-                <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-                  Please <a href="/login" className="font-semibold underline">login</a> to continue with your booking.
+            <div className="flex-1 h-1 bg-gray-300 mx-4"></div>
+            
+            <div className={`flex items-center ${step >= 2 ? 'text-primary-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
+                step >= 2 ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'
+              }`}>
+                2
+              </div>
+              <span className="ml-2 font-medium">Payment</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2">
+            {step === 1 && (
+              <div className="card">
+                <h2 className="text-2xl font-bold mb-6">Passenger Details</h2>
+                
+                {/* Flight Summary */}
+                <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-semibold">
+                        {flight.origin} → {flight.destination}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {formatDate(flight.departureTime)} • {formatDuration(flight.duration)}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {flight.airline.name} • {flight.flightNumber}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-primary-600">
+                        {formatCurrency(flight.price * passengers.length)}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {passengers.length} {passengers.length === 1 ? 'passenger' : 'passengers'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <form onSubmit={handleBookingSubmit}>
-                  {passengers.map((passenger, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4 mb-4">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-medium">Passenger {index + 1}</h3>
-                        {passengers.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removePassenger(index)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <i className="fas fa-times"></i> Remove
-                          </button>
-                        )}
+
+                {/* Class Selection */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Travel Class
+                  </label>
+                  <div className="grid grid-cols-3 gap-4">
+                    {['economy', 'business', 'first'].map((cls) => (
+                      <div
+                        key={cls}
+                        onClick={() => setSelectedClass(cls)}
+                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                          selectedClass === cls
+                            ? 'border-primary-600 bg-primary-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <h4 className="font-semibold capitalize">{cls}</h4>
+                        <p className="text-sm text-gray-600">
+                          {cls === 'economy' ? 'Standard seating' :
+                           cls === 'business' ? 'Extra legroom' :
+                           'Luxury experience'}
+                        </p>
                       </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Passenger Forms */}
+                <div className="space-y-6">
+                  {passengers.map((passenger, index) => (
+                    <div key={index} className="border-t pt-6">
+                      <h3 className="text-lg font-semibold mb-4">
+                        Passenger {index + 1}
+                      </h3>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            First Name *
+                          </label>
                           <input
                             type="text"
-                            value={passenger.name}
-                            onChange={(e) => handlePassengerChange(index, 'name', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded"
+                            value={passenger.firstName}
+                            onChange={(e) => handlePassengerChange(index, 'firstName', e.target.value)}
+                            className="input-field"
                             required
                           />
                         </div>
                         
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Last Name *
+                          </label>
                           <input
-                            type="number"
-                            min="1"
-                            max="120"
-                            value={passenger.age}
-                            onChange={(e) => handlePassengerChange(index, 'age', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded"
+                            type="text"
+                            value={passenger.lastName}
+                            onChange={(e) => handlePassengerChange(index, 'lastName', e.target.value)}
+                            className="input-field"
                             required
                           />
                         </div>
                         
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Date of Birth *
+                          </label>
+                          <input
+                            type="date"
+                            value={passenger.dateOfBirth}
+                            onChange={(e) => handlePassengerChange(index, 'dateOfBirth', e.target.value)}
+                            className="input-field"
+                            required
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Gender *
+                          </label>
                           <select
                             value={passenger.gender}
                             onChange={(e) => handlePassengerChange(index, 'gender', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded"
+                            className="input-field"
                             required
                           >
                             <option value="">Select</option>
@@ -269,95 +260,88 @@ const Booking = () => {
                             <option value="other">Other</option>
                           </select>
                         </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Passport Number *
+                          </label>
+                          <input
+                            type="text"
+                            value={passenger.passportNumber}
+                            onChange={(e) => handlePassengerChange(index, 'passportNumber', e.target.value)}
+                            className="input-field"
+                            required
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nationality *
+                          </label>
+                          <input
+                            type="text"
+                            value={passenger.nationality}
+                            onChange={(e) => handlePassengerChange(index, 'nationality', e.target.value)}
+                            className="input-field"
+                            required
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
-                  
-                  <button
-                    type="button"
-                    onClick={addPassenger}
-                    className="flex items-center text-blue-600 hover:text-blue-800 mb-6"
-                  >
-                    <i className="fas fa-plus-circle mr-2"></i> Add Another Passenger
-                  </button>
-                  
-                  {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                      {error}
-                    </div>
-                  )}
-                  
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition disabled:opacity-50"
-                  >
-                    {submitting ? <LoadingSpinner size="small" /> : `Proceed to Payment - ₹${totalPrice}`}
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <div className="bg-white rounded-lg shadow p-6 sticky top-6">
-              <h2 className="text-xl font-semibold mb-4">Price Summary</h2>
-              
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between">
-                  <span>Base Fare ({passengers.length} x ₹{flight.price})</span>
-                  <span>₹{totalPrice}</span>
                 </div>
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>Taxes & Fees</span>
-                  <span>₹0</span>
-                </div>
-              </div>
-              
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-between font-semibold">
-                  <span>Total</span>
-                  <span>₹{totalPrice}</span>
-                </div>
-              </div>
-              
-              <div className="mt-6 bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-medium mb-2">What's included:</h3>
-                <ul className="text-sm space-y-1">
-                  <li className="flex items-center">
-                    <i className="fas fa-check text-green-600 mr-2"></i>
-                    <span>Free cabin baggage</span>
-                  </li>
-                  <li className="flex items-center">
-                    <i className="fas fa-check text-green-600 mr-2"></i>
-                    <span>In-flight entertainment</span>
-                  </li>
-                  <li className="flex items-center">
-                    <i className="fas fa-check text-green-600 mr-2"></i>
-                    <span>Meal service</span>
-                  </li>
-                </ul>
-              </div>
 
-              <div className="mt-6 bg-green-50 p-4 rounded-lg">
-                <h3 className="font-medium mb-2">Secure Payment</h3>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <i className="fas fa-shield-alt text-green-600"></i>
-                  <span>Your payment information is encrypted and secure</span>
+                <button
+                  onClick={handleCreateBooking}
+                  disabled={passengers.some(p => !p.firstName || !p.lastName || !p.dateOfBirth || !p.gender || !p.passportNumber || !p.nationality)}
+                  className="w-full btn-primary mt-8 disabled:opacity-50"
+                >
+                  Continue to Payment
+                </button>
+              </div>
+            )}
+
+            {step === 2 && booking && (
+              <Payment 
+                booking={booking} 
+                onSuccess={handlePaymentSuccess}
+              />
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="card sticky top-4">
+              <h3 className="text-lg font-semibold mb-4">Booking Summary</h3>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span>Flight:</span>
+                  <span className="font-semibold">
+                    {flight.origin} → {flight.destination}
+                  </span>
                 </div>
-                <div className="flex mt-2 space-x-2">
-                  <div className="w-10 h-6 bg-gray-200 rounded flex items-center justify-center">
-                    <i className="fab fa-cc-visa text-blue-600"></i>
-                  </div>
-                  <div className="w-10 h-6 bg-gray-200 rounded flex items-center justify-center">
-                    <i className="fab fa-cc-mastercard text-red-600"></i>
-                  </div>
-                  <div className="w-10 h-6 bg-gray-200 rounded flex items-center justify-center">
-                    <i className="fab fa-cc-amex text-blue-800"></i>
-                  </div>
-                  <div className="w-10 h-6 bg-gray-200 rounded flex items-center justify-center">
-                    <i className="fab fa-cc-discover text-orange-600"></i>
-                  </div>
+                
+                <div className="flex justify-between">
+                  <span>Date:</span>
+                  <span>{formatDate(flight.departureTime)}</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span>Passengers:</span>
+                  <span>{passengers.length}</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span>Class:</span>
+                  <span className="capitalize">{selectedClass}</span>
+                </div>
+                
+                <div className="flex justify-between text-lg font-bold pt-3 border-t">
+                  <span>Total:</span>
+                  <span className="text-primary-600">
+                    {formatCurrency(flight.price * passengers.length)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -365,7 +349,7 @@ const Booking = () => {
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default Booking;
+export default Booking

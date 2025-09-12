@@ -1,57 +1,82 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
+import { validateEmail, validatePassword, validateName, validatePhone } from '../utils/validators'
+import { toast } from 'react-toastify'
 
 const Register = () => {
-  const [formData, setFormData] = useState({
+  const [userData, setUserData] = useState({
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  
-  const { register } = useAuth();
-  const navigate = useNavigate();
+    confirmPassword: '',
+    phone: '',
+    dateOfBirth: ''
+  })
+  const [loading, setLoading] = useState(false)
+  const { register } = useAuth()
+  const navigate = useNavigate()
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
+    const { name, value } = e.target
+    setUserData(prev => ({
       ...prev,
       [name]: value
-    }));
-  };
+    }))
+  }
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (formData.password !== formData.confirmPassword) {
-      return setError('Passwords do not match');
-    }
-    
-    setLoading(true);
-    setError('');
+    e.preventDefault()
+    setLoading(true)
 
-    try {
-      const result = await register({
-        name: formData.name,
-        email: formData.email,
-        password: formData.password
-      });
-      
-      if (result.success) {
-        navigate('/');
-      } else {
-        setError(result.message);
-      }
-    } catch (err) {
-      setError('An unexpected error occurred');
-    } finally {
-      setLoading(false);
+    // Validation
+    if (!validateName(userData.name)) {
+      toast.error('Please enter a valid name (at least 2 characters)')
+      setLoading(false)
+      return
     }
-  };
+
+    if (!validateEmail(userData.email)) {
+      toast.error('Please enter a valid email address')
+      setLoading(false)
+      return
+    }
+
+    if (!validatePassword(userData.password)) {
+      toast.error('Password must be at least 6 characters long')
+      setLoading(false)
+      return
+    }
+
+    if (userData.password !== userData.confirmPassword) {
+      toast.error('Passwords do not match')
+      setLoading(false)
+      return
+    }
+
+    if (userData.phone && !validatePhone(userData.phone)) {
+      toast.error('Please enter a valid phone number')
+      setLoading(false)
+      return
+    }
+
+    const result = await register({
+      name: userData.name,
+      email: userData.email,
+      password: userData.password,
+      phone: userData.phone,
+      dateOfBirth: userData.dateOfBirth
+    })
+
+    if (result.success) {
+      toast.success('Registration successful!')
+      navigate('/')
+    } else {
+      toast.error(result.message)
+    }
+
+    setLoading(false)
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -62,72 +87,107 @@ const Register = () => {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}
-            <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link
+              to="/login"
+              className="font-medium text-primary-600 hover:text-primary-500"
+            >
               sign in to your existing account
             </Link>
           </p>
         </div>
+        
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-              {error}
-            </div>
-          )}
-          <div className="rounded-md shadow-sm -space-y-px">
+          <div className="space-y-4">
             <div>
-              <label htmlFor="name" className="sr-only">Full Name</label>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                Full Name
+              </label>
               <input
                 id="name"
                 name="name"
                 type="text"
-                autoComplete="name"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Full Name"
-                value={formData.name}
+                value={userData.name}
                 onChange={handleChange}
+                className="input-field mt-1"
+                placeholder="Enter your full name"
               />
             </div>
+
             <div>
-              <label htmlFor="email" className="sr-only">Email address</label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email address
+              </label>
               <input
                 id="email"
                 name="email"
                 type="email"
-                autoComplete="email"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                value={formData.email}
+                value={userData.email}
                 onChange={handleChange}
+                className="input-field mt-1"
+                placeholder="Enter your email"
               />
             </div>
+
             <div>
-              <label htmlFor="password" className="sr-only">Password</label>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                Phone Number (Optional)
+              </label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                value={userData.phone}
+                onChange={handleChange}
+                className="input-field mt-1"
+                placeholder="Enter your phone number"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
+                Date of Birth (Optional)
+              </label>
+              <input
+                id="dateOfBirth"
+                name="dateOfBirth"
+                type="date"
+                value={userData.dateOfBirth}
+                onChange={handleChange}
+                className="input-field mt-1"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Password
+              </label>
               <input
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="new-password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                value={formData.password}
+                value={userData.password}
                 onChange={handleChange}
+                className="input-field mt-1"
+                placeholder="Enter your password"
               />
             </div>
+
             <div>
-              <label htmlFor="confirmPassword" className="sr-only">Confirm Password</label>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                Confirm Password
+              </label>
               <input
                 id="confirmPassword"
                 name="confirmPassword"
                 type="password"
-                autoComplete="new-password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Confirm Password"
-                value={formData.confirmPassword}
+                value={userData.confirmPassword}
                 onChange={handleChange}
+                className="input-field mt-1"
+                placeholder="Confirm your password"
               />
             </div>
           </div>
@@ -136,15 +196,15 @@ const Register = () => {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
             >
-              {loading ? <LoadingSpinner size="small" /> : 'Create account'}
+              {loading ? 'Creating account...' : 'Create account'}
             </button>
           </div>
         </form>
       </div>
     </div>
-  );
-};
+  )
+}
 
 export default Register;

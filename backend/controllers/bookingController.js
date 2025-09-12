@@ -1,116 +1,200 @@
+// backend/controllers/bookingController.js
 const Booking = require('../models/Booking');
 const Flight = require('../models/Flight');
 
-// Get user bookings
-const getUserBookings = async (req, res) => {
+// Create a new booking
+exports.createBooking = async (req, res) => {
   try {
-    const bookings = await Booking.find({ user: req.user.id }).populate('flight').sort({ bookingDate: -1 });
-    res.json(bookings);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
-  }
-};
-
-// Get all bookings
-const getAllBookings = async (req, res) => {
-  try {
-    const bookings = await Booking.find().populate('flight').populate('user', 'name email').sort({ bookingDate: -1 });
-    res.json(bookings);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
-  }
-};
-
-// Create booking
-const createBooking = async (req, res) => {
-  try {
-    const { flightId, passengers } = req.body;
+    const { flightId, passengers, contactInfo, totalPrice, paymentId } = req.body;
     
+    // Check if flight exists and has enough seats
     const flight = await Flight.findById(flightId);
     if (!flight) {
-      return res.status(404).json({ message: 'Flight not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Flight not found'
+      });
     }
     
-    if (flight.seats < passengers.length) {
-      return res.status(400).json({ message: 'Not enough seats available' });
+    if (flight.availableSeats < passengers.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Not enough seats available'
+      });
     }
     
+    // Create booking
     const booking = new Booking({
       user: req.user.id,
       flight: flightId,
       passengers,
-      totalPrice: flight.price * passengers.length
+      contactInfo,
+      totalPrice,
+      paymentId
     });
     
     await booking.save();
     
-    flight.seats -= passengers.length;
+    // Update available seats
+    flight.availableSeats -= passengers.length;
     await flight.save();
     
+    // Populate flight details for response
     await booking.populate('flight');
-    res.json(booking);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
+    
+    res.status(201).json({
+      success: true,
+      data: booking
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: 'Error creating booking',
+      error: error.message
+    });
   }
 };
 
-// Confirm booking
-const confirmBooking = async (req, res) => {
+// Get user's bookings
+exports.getUserBookings = async (req, res) => {
   try {
-    const { paymentId } = req.body;
+    const bookings = await Booking.find({ user: req.user.id })
+      .populate('flight')
+      .sort({ createdAt: -1 });
     
-    const booking = await Booking.findById(req.params.id);
+    res.json({
+      success: true,
+      count: bookings.length,
+      data: bookings
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
+  }
+};
+
+// Get booking by ID
+exports.getBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+      .populate('flight')
+      .populate('user', 'name email');
+    
     if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
     }
     
-    if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Access denied' });
+    // Check if user owns the booking or is admin
+    if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to access this booking'
+      });
     }
     
-    booking.status = 'confirmed';
-    booking.paymentId = paymentId;
-    booking.paidAt = new Date();
-    
-    await booking.save();
-    await booking.populate('flight');
-    
-    res.json(booking);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
+    res.json({
+      success: true,
+      data: booking
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
   }
 };
 
 // Cancel booking
-const cancelBooking = async (req, res) => {
+exports.cancelBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
+    
     if (!booking) {
-      return res.status(404).json({ message: 'Booking not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found'
+      });
     }
     
+    // Check if user owns the booking or is admin
     if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Access denied' });
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to cancel this booking'
+      });
     }
     
+    // Check if booking can be cancelled (e.g., not too close to departure)
     const flight = await Flight.findById(booking.flight);
-    if (flight) {
-      flight.seats += booking.passengers.length;
-      await flight.save();
+    const departureDate = new Date(flight.departureDate);
+    const now = new Date();
+    const hoursUntilDeparture = (departureDate - now) / (1000 * 60 * 60);
+    
+    if (hoursUntilDeparture < 24) {
+      return res.status(400).json({
+        success: false,
+        message: 'Booking cannot be cancelled within 24 hours of departure'
+      });
     }
     
+    // Update booking status
     booking.status = 'cancelled';
     await booking.save();
     
-    res.json(booking);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
+    // Return seats to flight
+    flight.availableSeats += booking.passengers.length;
+    await flight.save();
+    
+    res.json({
+      success: true,
+      message: 'Booking cancelled successfully',
+      data: booking
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
   }
 };
 
-module.exports = { getUserBookings, getAllBookings, createBooking, confirmBooking, cancelBooking };
+// Get all bookings (admin only)
+exports.getAllBookings = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    const bookings = await Booking.find()
+      .populate('flight')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+    
+    const total = await Booking.countDocuments();
+    
+    res.json({
+      success: true,
+      count: bookings.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: bookings
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
+  }
+};

@@ -1,53 +1,30 @@
-// User roles
-const USER_ROLES = {
-  ADMIN: 'admin',
-  USER: 'user'
-};
+const FLIGHT_CLASS = {
+  ECONOMY: 'economy',
+  BUSINESS: 'business',
+  FIRST: 'first'
+}
 
-// Booking statuses
 const BOOKING_STATUS = {
   PENDING: 'pending',
   CONFIRMED: 'confirmed',
   CANCELLED: 'cancelled'
-};
+}
 
-// Flight statuses
-const FLIGHT_STATUS = {
-  SCHEDULED: 'scheduled',
-  DELAYED: 'delayed',
-  CANCELLED: 'cancelled',
-  COMPLETED: 'completed'
-};
-
-// Payment statuses
 const PAYMENT_STATUS = {
   PENDING: 'pending',
   COMPLETED: 'completed',
   FAILED: 'failed',
   REFUNDED: 'refunded'
-};
+}
 
-// API response messages
-const MESSAGES = {
-  AUTH: {
-    INVALID_CREDENTIALS: 'Invalid credentials',
-    USER_EXISTS: 'User already exists',
-    ACCESS_DENIED: 'Access denied',
-    TOKEN_INVALID: 'Token is not valid'
-  },
-  FLIGHT: {
-    NOT_FOUND: 'Flight not found',
-    SEATS_UNAVAILABLE: 'Not enough seats available'
-  },
-  BOOKING: {
-    NOT_FOUND: 'Booking not found'
-  },
-  USER: {
-    NOT_FOUND: 'User not found'
-  },
-  VALIDATION: {
-    FAILED: 'Validation failed'
-  }
-};
+const USER_ROLES = {
+  USER: 'user',
+  ADMIN: 'admin'
+}
 
-module.exports = { USER_ROLES, BOOKING_STATUS, FLIGHT_STATUS, PAYMENT_STATUS, MESSAGES };
+module.exports = {
+  FLIGHT_CLASS,
+  BOOKING_STATUS,
+  PAYMENT_STATUS,
+  USER_ROLES
+}

@@ -1,17 +1,19 @@
-const express = require('express');
-const User = require('../models/User');
+const express = require('express')
+const User = require('../models/User')
+const router = express.Router()
 
-const router = express.Router();
-
-// Get all users
-router.get('/', async (req, res) => {
+// Get user profile
+router.get('/:id', async (req, res) => {
   try {
-    const users = await User.find().select('-password');
-    res.json(users);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
+    const user = await User.findById(req.params.id).select('-password')
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+    res.json(user)
+  } catch (error) {
+    console.error('Get user error:', error)
+    res.status(500).json({ message: 'Server error' })
   }
-});
+})
 
-module.exports = router;
+module.exports = router

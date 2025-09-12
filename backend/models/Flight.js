@@ -1,83 +1,44 @@
-const mongoose = require('mongoose');
+const mongoose = require('mongoose')
 
-const FlightSchema = new mongoose.Schema({
+const flightSchema = new mongoose.Schema({
   airline: {
     type: String,
-    required: true,
-    trim: true
+    required: true
   },
   flightNumber: {
     type: String,
-    required: true,
-    trim: true,
-    uppercase: true
+    required: true
   },
-  departure: {
-    city: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    code: {
-      type: String,
-      required: true,
-      trim: true,
-      uppercase: true,
-      maxlength: 3,
-      minlength: 3
-    },
-    time: {
-      type: Date,
-      required: true
-    }
+  origin: {
+    type: String,
+    required: true
   },
-  arrival: {
-    city: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    code: {
-      type: String,
-      required: true,
-      trim: true,
-      uppercase: true,
-      maxlength: 3,
-      minlength: 3
-    },
-    time: {
-      type: Date,
-      required: true
-    }
+  destination: {
+    type: String,
+    required: true
+  },
+  departureTime: {
+    type: Date,
+    required: true
+  },
+  arrivalTime: {
+    type: Date,
+    required: true
   },
   duration: {
-    type: String,
+    type: Number,
     required: true
   },
   price: {
     type: Number,
-    required: true,
-    min: 0
+    required: true
   },
-  seats: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  status: {
-    type: String,
-    default: 'scheduled',
-    enum: ['scheduled', 'delayed', 'cancelled', 'completed']
+  available: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true
-});
+})
 
-// Index for search optimization
-FlightSchema.index({ 
-  'departure.city': 'text', 
-  'arrival.city': 'text',
-  'departure.time': 1 
-});
-
-module.exports = mongoose.model('Flight', FlightSchema);
+module.exports = mongoose.model('Flight', flightSchema)

@@ -1,351 +1,158 @@
-// backend/controllers/authController.js
+// backend/controllers/adminController.js
+const Booking = require('../models/Booking');
+const Flight = require('../models/Flight');
 const User = require('../models/User');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const sendEmail = require('../utils/email');
+const asyncHandler = require('../middleware/asyncHandler');
 
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || '30d',
+// @desc    Get admin dashboard statistics
+// @route   GET /api/admin/stats
+// @access  Private/Admin
+exports.getAdminStats = asyncHandler(async (req, res, next) => {
+  const totalBookings = await Booking.countDocuments();
+  
+  const totalRevenueResult = await Booking.aggregate([
+    { $match: { status: 'confirmed' } },
+    { $group: { _id: null, total: { $sum: '$fareDetails.totalAmount' } } }
+  ]);
+  
+  const totalRevenue = totalRevenueResult[0]?.total || 0;
+  
+  const activeFlights = await Flight.countDocuments({ 
+    departureTime: { $gte: new Date() } 
   });
-};
+  
+  const registeredUsers = await User.countDocuments();
 
-// Register user
-exports.register = async (req, res) => {
-  try {
-    const { name, email, password, phone } = req.body;
-    
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists with this email'
-      });
+  res.status(200).json({
+    success: true,
+    data: {
+      totalBookings,
+      totalRevenue,
+      activeFlights,
+      registeredUsers
     }
-    
-    // Create user
-    const user = await User.create({
-      name,
-      email,
-      password,
-      phone
-    });
-    
-    // Generate verification token
-    const verificationToken = user.getVerificationToken();
-    await user.save({ validateBeforeSave: false });
-    
-    // Create verification URL
-    const verificationUrl = `${req.protocol}://${req.get('host')}/api/auth/verify-email/${verificationToken}`;
-    
-    // Send verification email
-    try {
-      await sendEmail({
-        email: user.email,
-        subject: 'Email Verification - SkyBooker',
-        message: `Please verify your email by clicking on the following link: ${verificationUrl}`
-      });
-      
-      res.status(201).json({
-        success: true,
-        message: 'Registration successful. Please check your email for verification.',
-        data: {
-          token: generateToken(user._id),
-          user: {
-            id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role
-          }
-        }
-      });
-    } catch (emailError) {
-      user.verificationToken = undefined;
-      user.verificationExpire = undefined;
-      await user.save({ validateBeforeSave: false });
-      
-      return res.status(500).json({
-        success: false,
-        message: 'Email could not be sent'
-      });
-    }
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: 'Error creating user',
-      error: error.message
-    });
-  }
-};
+  });
+});
 
-// Verify email
-exports.verifyEmail = async (req, res) => {
-  try {
-    const { token } = req.params;
-    
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-    
-    const user = await User.findOne({
-      verificationToken: hashedToken,
-      verificationExpire: { $gt: Date.now() }
-    });
-    
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired verification token'
-      });
-    }
-    
-    user.isVerified = true;
-    user.verificationToken = undefined;
-    user.verificationExpire = undefined;
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: 'Email verified successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
-  }
-};
+// @desc    Get analytics data
+// @route   GET /api/admin/analytics
+// @access  Private/Admin
+exports.getAnalytics = asyncHandler(async (req, res, next) => {
+  // Calculate revenue
+  const revenueResult = await Booking.aggregate([
+    { $match: { status: 'confirmed' } },
+    { $group: { _id: null, total: { $sum: '$fareDetails.totalAmount' } } }
+  ]);
+  
+  const totalRevenue = revenueResult[0]?.total || 0;
 
-// Login user
-exports.login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    // Check if user exists
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-    
-    // Check if password matches
-    const isPasswordMatch = await bcrypt.compare(password, user.password);
-    if (!isPasswordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-    
-    // Check if email is verified
-    if (!user.isVerified) {
-      return res.status(401).json({
-        success: false,
-        message: 'Please verify your email before logging in'
-      });
-    }
-    
-    // Generate token
-    const token = generateToken(user._id);
-    
-    res.json({
-      success: true,
-      data: {
-        token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role
-        }
+  // Get total bookings
+  const totalBookings = await Booking.countDocuments({ status: 'confirmed' });
+
+  // Get total users
+  const totalUsers = await User.countDocuments();
+
+  // Get top routes
+  const topRoutes = await Booking.aggregate([
+    { 
+      $lookup: {
+        from: 'flights',
+        localField: 'flight',
+        foreignField: '_id',
+        as: 'flightData'
       }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
-  }
-};
+    },
+    { $unwind: '$flightData' },
+    { $group: { 
+      _id: {
+        origin: '$flightData.origin',
+        destination: '$flightData.destination'
+      },
+      bookings: { $sum: 1 }
+    }},
+    { $sort: { bookings: -1 } },
+    { $limit: 5 }
+  ]);
 
-// Get current user
-exports.getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    
-    res.json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
-  }
-};
-
-// Update user profile
-exports.updateProfile = async (req, res) => {
-  try {
-    const fieldsToUpdate = {
-      name: req.body.name,
-      phone: req.body.phone
-    };
-    
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      fieldsToUpdate,
-      {
-        new: true,
-        runValidators: true
+  // Get popular airlines
+  const popularAirlines = await Booking.aggregate([
+    { 
+      $lookup: {
+        from: 'flights',
+        localField: 'flight',
+        foreignField: '_id',
+        as: 'flightData'
       }
-    );
-    
-    res.json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: 'Error updating profile',
-      error: error.message
-    });
-  }
-};
+    },
+    { $unwind: '$flightData' },
+    { $group: { 
+      _id: '$flightData.airline',
+      bookings: { $sum: 1 }
+    }},
+    { $sort: { bookings: -1 } },
+    { $limit: 5 }
+  ]);
 
-// Change password
-exports.changePassword = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('+password');
-    
-    // Check current password
-    const isCurrentPasswordMatch = await bcrypt.compare(
-      req.body.currentPassword,
-      user.password
-    );
-    
-    if (!isCurrentPasswordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Current password is incorrect'
-      });
+  res.status(200).json({
+    success: true,
+    data: {
+      revenue: {
+        total: totalRevenue,
+        change: 12 // Simplified percentage change
+      },
+      bookings: {
+        total: totalBookings,
+        change: 8 // Simplified percentage change
+      },
+      users: {
+        total: totalUsers,
+        change: 5 // Simplified percentage change
+      },
+      topRoutes: topRoutes.map(route => ({
+        origin: route._id.origin,
+        destination: route._id.destination,
+        bookings: route.bookings
+      })),
+      popularAirlines: popularAirlines.map(airline => ({
+        name: airline._id,
+        bookings: airline.bookings
+      }))
     }
-    
-    // Update password
-    user.password = req.body.newPassword;
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: 'Password updated successfully'
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: 'Error changing password',
-      error: error.message
-    });
-  }
-};
+  });
+});
 
-// Forgot password
-exports.forgotPassword = async (req, res) => {
-  try {
-    const user = await User.findOne({ email: req.body.email });
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found with this email'
-      });
-    }
-    
-    // Generate reset token
-    const resetToken = user.getResetPasswordToken();
-    await user.save({ validateBeforeSave: false });
-    
-    // Create reset URL
-    const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
-    
-    // Send email
-    try {
-      await sendEmail({
-        email: user.email,
-        subject: 'Password Reset Request - SkyBooker',
-        message: `You are receiving this email because you requested a password reset. Please make a PUT request to: ${resetUrl}`
-      });
-      
-      res.json({
-        success: true,
-        message: 'Email sent with password reset instructions'
-      });
-    } catch (emailError) {
-      user.resetPasswordToken = undefined;
-      user.resetPasswordExpire = undefined;
-      await user.save({ validateBeforeSave: false });
-      
-      return res.status(500).json({
-        success: false,
-        message: 'Email could not be sent'
-      });
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
-  }
-};
+// @desc    Get recent bookings
+// @route   GET /api/admin/recent-bookings
+// @access  Private/Admin
+exports.getRecentBookings = asyncHandler(async (req, res, next) => {
+  const limit = parseInt(req.query.limit) || 5;
+  
+  const bookings = await Booking.find()
+    .populate('flight', 'number origin destination departureTime')
+    .populate('user', 'name email')
+    .sort('-createdAt')
+    .limit(limit);
 
-// Reset password
-exports.resetPassword = async (req, res) => {
-  try {
-    const { token } = req.params;
-    
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-    
-    const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpire: { $gt: Date.now() }
-    });
-    
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired reset token'
-      });
-    }
-    
-    // Set new password
-    user.password = req.body.password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
-    await user.save();
-    
-    res.json({
-      success: true,
-      message: 'Password reset successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
-  }
-};
+  res.status(200).json({
+    success: true,
+    count: bookings.length,
+    data: bookings
+  });
+});
+
+// @desc    Get recent flights
+// @route   GET /api/admin/recent-flights
+// @access  Private/Admin
+exports.getRecentFlights = asyncHandler(async (req, res, next) => {
+  const limit = parseInt(req.query.limit) || 5;
+  
+  const flights = await Flight.find()
+    .sort('-createdAt')
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    count: flights.length,
+    data: flights
+  });
+});

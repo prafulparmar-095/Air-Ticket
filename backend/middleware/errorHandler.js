@@ -1,30 +1,35 @@
+// backend/middleware/errorHandler.js
+const ErrorResponse = require('../utils/errorResponse');
+
 const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err)
+  let error = { ...err };
+  error.message = err.message;
+
+  // Log to console for dev
+  console.log(err);
+
+  // Mongoose bad ObjectId
+  if (err.name === 'CastError') {
+    const message = 'Resource not found';
+    error = new ErrorResponse(message, 404);
+  }
+
+  // Mongoose duplicate key
+  if (err.code === 11000) {
+    const message = 'Duplicate field value entered';
+    error = new ErrorResponse(message, 400);
+  }
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map(error => error.message)
-    return res.status(400).json({ message: 'Validation error', errors })
+    const message = Object.values(err.errors).map(val => val.message);
+    error = new ErrorResponse(message, 400);
   }
 
-  // Mongoose duplicate key error
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0]
-    return res.status(400).json({ message: `${field} already exists` })
-  }
+  res.status(error.statusCode || 500).json({
+    success: false,
+    error: error.message || 'Server Error'
+  });
+};
 
-  // JWT error
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({ message: 'Invalid token' })
-  }
-
-  // JWT expired error
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({ message: 'Token expired' })
-  }
-
-  // Default error
-  res.status(500).json({ message: 'Server error' })
-}
-
-module.exports = errorHandler
+module.exports = errorHandler;

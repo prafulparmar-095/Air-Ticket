@@ -1,59 +1,38 @@
-const express = require('express')
-const mongoose = require('mongoose')
-const cors = require('cors')
-require('dotenv').config()
+// backend/server.js
+const express = require('express');
+const dotenv = require('dotenv');
+const cors = require('cors');
+const connectDB = require('./config/database');
 
-const app = express()
+// Load env vars
+dotenv.config({ path: './.env' });
 
-// Basic middleware
-app.use(cors())
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
+// Connect to database
+connectDB();
 
-// Request logging
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`)
-  next()
-})
+const app = express();
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/airticket', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB Connected'))
-.catch(err => console.error('MongoDB connection error:', err))
+// Body parser middleware
+app.use(express.json());
 
-// Basic routes
-app.use('/api/auth', require('./routes/auth'))
-app.use('/api/flights', require('./routes/flights'))
-app.use('/api/bookings', require('./routes/bookings'))
-app.use('/api/users', require('./routes/users'))
+// Enable CORS
+app.use(cors());
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'Server is running',
-    timestamp: new Date().toISOString()
-  })
-})
+// Mount routers
+app.use('/api', require('./routes'));
 
-// Handle 404
-app.use('*', (req, res) => {
-  res.status(404).json({ message: 'Route not found' })
-})
+// Error handling middleware
+app.use(require('./middleware/errorHandler'));
 
-// Basic error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack)
-  res.status(500).json({ message: 'Something went wrong!' })
-})
+const PORT = process.env.PORT || 5000;
 
-const PORT = process.env.PORT || 5000
+const server = app.listen(PORT, () => {
+  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+});
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
-
-module.exports = app
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err, promise) => {
+  console.log(`Error: ${err.message}`);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});

@@ -1,225 +1,239 @@
 // backend/controllers/flightController.js
 const Flight = require('../models/Flight');
-const axios = require('axios');
+const asyncHandler = require('../middleware/asyncHandler');
+const ErrorResponse = require('../utils/errorResponse');
 
-// Search flights
-exports.searchFlights = async (req, res) => {
-  try {
-    const { origin, destination, departureDate, returnDate, passengers } = req.query;
-    
-    // Try to get flights from database first
-    let flights = await Flight.find({
-      origin: new RegExp(origin, 'i'),
-      destination: new RegExp(destination, 'i'),
-      departureDate: { $gte: new Date(departureDate) }
-    }).populate('airline');
-    
-    // If no flights found in database, try to fetch from AviationStack API
-    if (flights.length === 0) {
-      flights = await fetchFromAviationStack(origin, destination, departureDate);
-      
-      // Save fetched flights to database for future requests
-      if (flights.length > 0) {
-        await Flight.insertMany(flights);
-      }
-    }
-    
-    // Check seat availability
-    const availableFlights = flights.filter(flight => 
-      flight.availableSeats >= parseInt(passengers || 1)
-    );
-    
-    res.json({
-      success: true,
-      count: availableFlights.length,
-      data: availableFlights
-    });
-  } catch (error) {
-    console.error('Flight search error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
+// @desc    Get all flights with filtering, sorting, and pagination
+// @route   GET /api/flights
+// @access  Public
+exports.getFlights = asyncHandler(async (req, res, next) => {
+  // Copy req.query
+  const reqQuery = { ...req.query };
+  
+  // Fields to exclude
+  const removeFields = ['select', 'sort', 'page', 'limit'];
+  removeFields.forEach(param => delete reqQuery[param]);
+  
+  // Create query string
+  let queryStr = JSON.stringify(reqQuery);
+  
+  // Create operators ($gt, $gte, etc)
+  queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
+  
+  // Finding resource
+  let query = Flight.find(JSON.parse(queryStr));
+  
+  // Select fields
+  if (req.query.select) {
+    const fields = req.query.select.split(',').join(' ');
+    query = query.select(fields);
   }
-};
-
-// Fetch flights from AviationStack API
-const fetchFromAviationStack = async (origin, destination, date) => {
-  try {
-    const accessKey = process.env.AVIATIONSTACK_API_KEY;
-    
-    if (!accessKey) {
-      console.warn('AviationStack API key not configured');
-      return [];
-    }
-    
-    const response = await axios.get('http://api.aviationstack.com/v1/flights', {
-      params: {
-        access_key: accessKey,
-        dep_iata: origin,
-        arr_iata: destination,
-        flight_date: date,
-        limit: 20
-      }
-    });
-    
-    if (response.data && response.data.data) {
-      return response.data.data.map(flight => ({
-        airline: flight.airline?.name || 'Unknown Airline',
-        airlineCode: flight.airline?.iata || 'UA',
-        flightNumber: flight.flight?.iata || 'UA000',
-        origin: flight.departure?.airport || origin,
-        destination: flight.arrival?.airport || destination,
-        departureTime: flight.departure?.scheduled ? 
-          new Date(flight.departure.scheduled).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00',
-        arrivalTime: flight.arrival?.scheduled ? 
-          new Date(flight.arrival.scheduled).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00',
-        departureDate: date,
-        duration: calculateFlightDuration(flight.departure?.scheduled, flight.arrival?.scheduled),
-        price: calculateFlightPrice(origin, destination),
-        availableSeats: Math.floor(Math.random() * 50) + 10, // Mock available seats
-        stops: Math.floor(Math.random() * 2), // Mock stops
-        aircraft: flight.aircraft?.iata || 'B737'
-      }));
-    }
-    
-    return [];
-  } catch (error) {
-    console.error('AviationStack API error:', error);
-    return [];
+  
+  // Sort
+  if (req.query.sort) {
+    const sortBy = req.query.sort.split(',').join(' ');
+    query = query.sort(sortBy);
+  } else {
+    query = query.sort('departureTime');
   }
-};
+  
+  // Pagination
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 25;
+  const startIndex = (page - 1) * limit;
+  const endIndex = page * limit;
+  const total = await Flight.countDocuments(JSON.parse(queryStr));
+  
+  query = query.skip(startIndex).limit(limit);
+  
+  // Executing query
+  const flights = await query;
+  
+  // Pagination result
+  const pagination = {};
+  
+  if (endIndex < total) {
+    pagination.next = {
+      page: page + 1,
+      limit
+    };
+  }
+  
+  if (startIndex > 0) {
+    pagination.prev = {
+      page: page - 1,
+      limit
+    };
+  }
+  
+  res.status(200).json({
+    success: true,
+    count: flights.length,
+    pagination,
+    data: flights
+  });
+});
 
-// Calculate flight duration
-const calculateFlightDuration = (departureTime, arrivalTime) => {
-  if (!departureTime || !arrivalTime) return '2h 30m';
+// @desc    Get single flight
+// @route   GET /api/flights/:id
+// @access  Public
+exports.getFlight = asyncHandler(async (req, res, next) => {
+  const flight = await Flight.findById(req.params.id);
   
-  const dep = new Date(departureTime);
-  const arr = new Date(arrivalTime);
-  const durationMs = arr - dep;
+  if (!flight) {
+    return next(new ErrorResponse(`Flight not found with id of ${req.params.id}`, 404));
+  }
   
-  const hours = Math.floor(durationMs / (1000 * 60 * 60));
-  const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-  
-  return `${hours}h ${minutes}m`;
-};
+  res.status(200).json({
+    success: true,
+    data: flight
+  });
+});
 
-// Calculate flight price based on route and random factors
-const calculateFlightPrice = (origin, destination) => {
-  // Base price based on route distance (simplified)
-  const routeFactors = {
-    'NYC-LAX': 300,
-    'NYC-LON': 400,
-    'NYC-PAR': 450,
-    'NYC-DXB': 600,
-    'LAX-LON': 500,
-    'LAX-SYD': 700
+// @desc    Create new flight
+// @route   POST /api/flights
+// @access  Private/Admin
+exports.createFlight = asyncHandler(async (req, res, next) => {
+  const flight = await Flight.create(req.body);
+  
+  res.status(201).json({
+    success: true,
+    data: flight
+  });
+});
+
+// @desc    Update flight
+// @route   PUT /api/flights/:id
+// @access  Private/Admin
+exports.updateFlight = asyncHandler(async (req, res, next) => {
+  const flight = await Flight.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true
+  });
+  
+  if (!flight) {
+    return next(new ErrorResponse(`Flight not found with id of ${req.params.id}`, 404));
+  }
+  
+  res.status(200).json({
+    success: true,
+    data: flight
+  });
+});
+
+// @desc    Delete flight
+// @route   DELETE /api/flights/:id
+// @access  Private/Admin
+exports.deleteFlight = asyncHandler(async (req, res, next) => {
+  const flight = await Flight.findByIdAndDelete(req.params.id);
+  
+  if (!flight) {
+    return next(new ErrorResponse(`Flight not found with id of ${req.params.id}`, 404));
+  }
+  
+  res.status(200).json({
+    success: true,
+    data: {}
+  });
+});
+
+// @desc    Get flights by search criteria
+// @route   POST /api/flights/search
+// @access  Public
+exports.searchFlights = asyncHandler(async (req, res, next) => {
+  const { origin, destination, departureDate, returnDate, travelers, class: cabinClass } = req.body;
+  
+  // Validate required fields
+  if (!origin || !destination || !departureDate) {
+    return next(new ErrorResponse('Please provide origin, destination, and departure date', 400));
+  }
+  
+  // Parse departure date
+  const startOfDay = new Date(departureDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(departureDate);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  // Build query
+  let query = {
+    origin: new RegExp(origin, 'i'),
+    destination: new RegExp(destination, 'i'),
+    departureTime: {
+      $gte: startOfDay,
+      $lte: endOfDay
+    }
   };
   
-  const routeKey = `${origin}-${destination}`;
-  const basePrice = routeFactors[routeKey] || 200;
+  // Add capacity check based on travelers
+  if (travelers) {
+    const capacityField = `${cabinClass || 'economy'}SeatsAvailable`;
+    query[capacityField] = { $gte: parseInt(travelers) };
+  }
   
-  // Add random variation
-  const variation = Math.random() * 100 - 50;
+  // Execute query
+  const flights = await Flight.find(query).sort('departureTime');
   
-  return Math.max(100, Math.round(basePrice + variation));
-};
-
-// Get flight by ID
-exports.getFlight = async (req, res) => {
-  try {
-    const flight = await Flight.findById(req.params.id).populate('airline');
+  // If round trip, search for return flights
+  let returnFlights = [];
+  if (returnDate) {
+    const returnStartOfDay = new Date(returnDate);
+    returnStartOfDay.setHours(0, 0, 0, 0);
     
-    if (!flight) {
-      return res.status(404).json({
-        success: false,
-        message: 'Flight not found'
-      });
+    const returnEndOfDay = new Date(returnDate);
+    returnEndOfDay.setHours(23, 59, 59, 999);
+    
+    const returnQuery = {
+      origin: new RegExp(destination, 'i'),
+      destination: new RegExp(origin, 'i'),
+      departureTime: {
+        $gte: returnStartOfDay,
+        $lte: returnEndOfDay
+      }
+    };
+    
+    if (travelers) {
+      const capacityField = `${cabinClass || 'economy'}SeatsAvailable`;
+      returnQuery[capacityField] = { $gte: parseInt(travelers) };
     }
     
-    res.json({
-      success: true,
-      data: flight
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
+    returnFlights = await Flight.find(returnQuery).sort('departureTime');
   }
-};
-
-// Create new flight (admin only)
-exports.createFlight = async (req, res) => {
-  try {
-    const flight = new Flight(req.body);
-    await flight.save();
-    
-    res.status(201).json({
-      success: true,
-      data: flight
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: 'Error creating flight',
-      error: error.message
-    });
-  }
-};
-
-// Update flight (admin only)
-exports.updateFlight = async (req, res) => {
-  try {
-    const flight = await Flight.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    
-    if (!flight) {
-      return res.status(404).json({
-        success: false,
-        message: 'Flight not found'
-      });
+  
+  res.status(200).json({
+    success: true,
+    count: flights.length,
+    data: {
+      departureFlights: flights,
+      returnFlights: returnFlights
     }
-    
-    res.json({
-      success: true,
-      data: flight
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: 'Error updating flight',
-      error: error.message
-    });
-  }
-};
+  });
+});
 
-// Delete flight (admin only)
-exports.deleteFlight = async (req, res) => {
-  try {
-    const flight = await Flight.findByIdAndDelete(req.params.id);
-    
-    if (!flight) {
-      return res.status(404).json({
-        success: false,
-        message: 'Flight not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      message: 'Flight deleted successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server Error',
-      error: error.message
-    });
+// @desc    Get available seats for a flight
+// @route   GET /api/flights/:id/seats
+// @access  Public
+exports.getAvailableSeats = asyncHandler(async (req, res, next) => {
+  const flight = await Flight.findById(req.params.id);
+  
+  if (!flight) {
+    return next(new ErrorResponse(`Flight not found with id of ${req.params.id}`, 404));
   }
-};
+  
+  // Get booked seats from bookings
+  const bookings = await Booking.find({ 
+    flight: req.params.id,
+    status: { $in: ['confirmed', 'pending'] }
+  });
+  
+  const bookedSeats = bookings.flatMap(booking => booking.seats);
+  
+  res.status(200).json({
+    success: true,
+    data: {
+      flight: flight._id,
+      bookedSeats,
+      seatMap: flight.seatMap
+    }
+  });
+});

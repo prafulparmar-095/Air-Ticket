@@ -1,46 +1,31 @@
-const express = require('express')
-const Flight = require('../models/Flight')
-const router = express.Router()
+// backend/routes/flights.js
+const express = require('express');
+const {
+  getFlights,
+  getFlight,
+  createFlight,
+  updateFlight,
+  deleteFlight,
+  searchFlights,
+  getAvailableSeats
+} = require('../controllers/flightController');
+const { protect, authorize } = require('../middleware/auth');
 
-// Get all flights
-router.get('/', async (req, res) => {
-  try {
-    const flights = await Flight.find({ available: true })
-    res.json(flights)
-  } catch (error) {
-    console.error('Get flights error:', error)
-    res.status(500).json({ message: 'Server error' })
-  }
-})
+const router = express.Router();
 
-// Search flights
-router.get('/search', async (req, res) => {
-  try {
-    const { origin, destination, departureDate } = req.query
+router.route('/')
+  .get(getFlights)
+  .post(protect, authorize('admin'), createFlight);
 
-    if (!origin || !destination) {
-      return res.status(400).json({ message: 'Origin and destination are required' })
-    }
+router.route('/:id')
+  .get(getFlight)
+  .put(protect, authorize('admin'), updateFlight)
+  .delete(protect, authorize('admin'), deleteFlight);
 
-    let query = {
-      origin: new RegExp(origin, 'i'),
-      destination: new RegExp(destination, 'i'),
-      available: true
-    }
+router.route('/search')
+  .post(searchFlights);
 
-    if (departureDate) {
-      const startDate = new Date(departureDate)
-      const endDate = new Date(startDate)
-      endDate.setDate(endDate.getDate() + 1)
-      query.departureTime = { $gte: startDate, $lt: endDate }
-    }
+router.route('/:id/seats')
+  .get(getAvailableSeats);
 
-    const flights = await Flight.find(query).sort({ departureTime: 1 })
-    res.json(flights)
-  } catch (error) {
-    console.error('Search flights error:', error)
-    res.status(500).json({ message: 'Server error' })
-  }
-})
-
-module.exports = router
+module.exports = router;

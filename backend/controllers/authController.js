@@ -1,158 +1,208 @@
-// backend/controllers/adminController.js
-const Booking = require('../models/Booking');
-const Flight = require('../models/Flight');
-const User = require('../models/User');
-const asyncHandler = require('../middleware/asyncHandler');
+import User from '../models/User.js'
+import { generateToken } from '../utils/helpers.js'
 
-// @desc    Get admin dashboard statistics
-// @route   GET /api/admin/stats
-// @access  Private/Admin
-exports.getAdminStats = asyncHandler(async (req, res, next) => {
-  const totalBookings = await Booking.countDocuments();
-  
-  const totalRevenueResult = await Booking.aggregate([
-    { $match: { status: 'confirmed' } },
-    { $group: { _id: null, total: { $sum: '$fareDetails.totalAmount' } } }
-  ]);
-  
-  const totalRevenue = totalRevenueResult[0]?.total || 0;
-  
-  const activeFlights = await Flight.countDocuments({ 
-    departureTime: { $gte: new Date() } 
-  });
-  
-  const registeredUsers = await User.countDocuments();
+// @desc    Register user
+// @route   POST /api/auth/register
+// @access  Public
+export const register = async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body
 
-  res.status(200).json({
-    success: true,
-    data: {
-      totalBookings,
-      totalRevenue,
-      activeFlights,
-      registeredUsers
+    // Check if user already exists
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { phone }] 
+    })
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User already exists with this email or phone number'
+      })
     }
-  });
-});
 
-// @desc    Get analytics data
-// @route   GET /api/admin/analytics
-// @access  Private/Admin
-exports.getAnalytics = asyncHandler(async (req, res, next) => {
-  // Calculate revenue
-  const revenueResult = await Booking.aggregate([
-    { $match: { status: 'confirmed' } },
-    { $group: { _id: null, total: { $sum: '$fareDetails.totalAmount' } } }
-  ]);
-  
-  const totalRevenue = revenueResult[0]?.total || 0;
+    // Create user
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      password
+    })
 
-  // Get total bookings
-  const totalBookings = await Booking.countDocuments({ status: 'confirmed' });
+    // Generate token
+    const token = generateToken(user._id)
 
-  // Get total users
-  const totalUsers = await User.countDocuments();
-
-  // Get top routes
-  const topRoutes = await Booking.aggregate([
-    { 
-      $lookup: {
-        from: 'flights',
-        localField: 'flight',
-        foreignField: '_id',
-        as: 'flightData'
+    res.status(201).json({
+      success: true,
+      message: 'User registered successfully',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role
       }
-    },
-    { $unwind: '$flightData' },
-    { $group: { 
-      _id: {
-        origin: '$flightData.origin',
-        destination: '$flightData.destination'
-      },
-      bookings: { $sum: 1 }
-    }},
-    { $sort: { bookings: -1 } },
-    { $limit: 5 }
-  ]);
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error during registration',
+      error: error.message
+    })
+  }
+}
 
-  // Get popular airlines
-  const popularAirlines = await Booking.aggregate([
-    { 
-      $lookup: {
-        from: 'flights',
-        localField: 'flight',
-        foreignField: '_id',
-        as: 'flightData'
-      }
-    },
-    { $unwind: '$flightData' },
-    { $group: { 
-      _id: '$flightData.airline',
-      bookings: { $sum: 1 }
-    }},
-    { $sort: { bookings: -1 } },
-    { $limit: 5 }
-  ]);
+// @desc    Login user
+// @route   POST /api/auth/login
+// @access  Public
+export const login = async (req, res) => {
+  try {
+    const { email, password } = req.body
 
-  res.status(200).json({
-    success: true,
-    data: {
-      revenue: {
-        total: totalRevenue,
-        change: 12 // Simplified percentage change
-      },
-      bookings: {
-        total: totalBookings,
-        change: 8 // Simplified percentage change
-      },
-      users: {
-        total: totalUsers,
-        change: 5 // Simplified percentage change
-      },
-      topRoutes: topRoutes.map(route => ({
-        origin: route._id.origin,
-        destination: route._id.destination,
-        bookings: route.bookings
-      })),
-      popularAirlines: popularAirlines.map(airline => ({
-        name: airline._id,
-        bookings: airline.bookings
-      }))
+    // Check if user exists
+    const user = await User.findOne({ email }).select('+password')
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      })
     }
-  });
-});
 
-// @desc    Get recent bookings
-// @route   GET /api/admin/recent-bookings
-// @access  Private/Admin
-exports.getRecentBookings = asyncHandler(async (req, res, next) => {
-  const limit = parseInt(req.query.limit) || 5;
-  
-  const bookings = await Booking.find()
-    .populate('flight', 'number origin destination departureTime')
-    .populate('user', 'name email')
-    .sort('-createdAt')
-    .limit(limit);
+    // Check password
+    const isPasswordValid = await user.comparePassword(password)
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      })
+    }
 
-  res.status(200).json({
-    success: true,
-    count: bookings.length,
-    data: bookings
-  });
-});
+    // Generate token
+    const token = generateToken(user._id)
 
-// @desc    Get recent flights
-// @route   GET /api/admin/recent-flights
-// @access  Private/Admin
-exports.getRecentFlights = asyncHandler(async (req, res, next) => {
-  const limit = parseInt(req.query.limit) || 5;
-  
-  const flights = await Flight.find()
-    .sort('-createdAt')
-    .limit(limit);
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role
+      }
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error during login',
+      error: error.message
+    })
+  }
+}
 
-  res.status(200).json({
-    success: true,
-    count: flights.length,
-    data: flights
-  });
-});
+// @desc    Get current user
+// @route   GET /api/auth/me
+// @access  Private
+export const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+    
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        dateOfBirth: user.dateOfBirth,
+        passportNumber: user.passportNumber,
+        passportExpiry: user.passportExpiry
+      }
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching user data',
+      error: error.message
+    })
+  }
+}
+
+// @desc    Update user profile
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, phone, dateOfBirth, passportNumber, passportExpiry } = req.body
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        name,
+        phone,
+        dateOfBirth,
+        passportNumber,
+        passportExpiry
+      },
+      { new: true, runValidators: true }
+    )
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        dateOfBirth: user.dateOfBirth,
+        passportNumber: user.passportNumber,
+        passportExpiry: user.passportExpiry
+      }
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error updating profile',
+      error: error.message
+    })
+  }
+}
+
+// @desc    Change password
+// @route   PUT /api/auth/change-password
+// @access  Private
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+    
+    const user = await User.findById(req.user.id).select('+password')
+    
+    // Check current password
+    const isCurrentPasswordValid = await user.comparePassword(currentPassword)
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      })
+    }
+    
+    // Update password
+    user.password = newPassword
+    await user.save()
+    
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error changing password',
+      error: error.message
+    })
+  }
+}

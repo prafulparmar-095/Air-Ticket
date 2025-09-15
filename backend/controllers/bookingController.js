@@ -1,200 +1,262 @@
-// backend/controllers/bookingController.js
-const Booking = require('../models/Booking');
-const Flight = require('../models/Flight');
+import Booking from '../models/Booking.js'
+import Flight from '../models/Flight.js'
+import User from '../models/User.js'
 
-// Create a new booking
-exports.createBooking = async (req, res) => {
+// @desc    Create booking
+// @route   POST /api/bookings
+// @access  Private
+export const createBooking = async (req, res) => {
   try {
-    const { flightId, passengers, contactInfo, totalPrice, paymentId } = req.body;
-    
-    // Check if flight exists and has enough seats
-    const flight = await Flight.findById(flightId);
+    const { flightId, passengers, contactInfo, cabinClass } = req.body
+
+    // Check if flight exists
+    const flight = await Flight.findById(flightId)
     if (!flight) {
       return res.status(404).json({
         success: false,
         message: 'Flight not found'
-      });
+      })
     }
-    
-    if (flight.availableSeats < passengers.length) {
+
+    // Check seat availability
+    const totalPassengers = passengers.length
+    if (!flight.hasAvailableSeats(cabinClass, totalPassengers)) {
       return res.status(400).json({
         success: false,
-        message: 'Not enough seats available'
-      });
+        message: 'Not enough available seats'
+      })
     }
-    
+
+    // Calculate total amount
+    const basePrice = flight.price
+    let totalAmount = 0
+
+    passengers.forEach(passenger => {
+      let passengerPrice = basePrice
+      
+      switch (passenger.type) {
+        case 'child':
+          passengerPrice *= 0.5 // 50% for children
+          break
+        case 'infant':
+          passengerPrice *= 0.1 // 10% for infants
+          break
+        // adult pays full price
+      }
+      
+      totalAmount += passengerPrice
+    })
+
+    // Apply cabin class multiplier
+    const cabinMultipliers = {
+      economy: 1,
+      premium_economy: 1.5,
+      business: 2.5,
+      first: 4
+    }
+    totalAmount *= cabinMultipliers[cabinClass]
+
+    // Add taxes and fees (15%)
+    totalAmount *= 1.15
+
     // Create booking
-    const booking = new Booking({
+    const booking = await Booking.create({
       user: req.user.id,
       flight: flightId,
       passengers,
       contactInfo,
-      totalPrice,
-      paymentId
-    });
-    
-    await booking.save();
-    
+      cabinClass,
+      totalAmount: Math.round(totalAmount)
+    })
+
     // Update available seats
-    flight.availableSeats -= passengers.length;
-    await flight.save();
-    
-    // Populate flight details for response
-    await booking.populate('flight');
-    
+    await flight.updateAvailableSeats(cabinClass, -totalPassengers)
+
+    // Populate booking details
+    await booking.populate('flight')
+    await booking.populate('user', 'name email phone')
+
     res.status(201).json({
       success: true,
-      data: booking
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: 'Error creating booking',
-      error: error.message
-    });
-  }
-};
-
-// Get user's bookings
-exports.getUserBookings = async (req, res) => {
-  try {
-    const bookings = await Booking.find({ user: req.user.id })
-      .populate('flight')
-      .sort({ createdAt: -1 });
-    
-    res.json({
-      success: true,
-      count: bookings.length,
-      data: bookings
-    });
+      message: 'Booking created successfully',
+      booking
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Server Error',
+      message: 'Server error creating booking',
       error: error.message
-    });
+    })
   }
-};
+}
 
-// Get booking by ID
-exports.getBooking = async (req, res) => {
+// @desc    Get user bookings
+// @route   GET /api/bookings/my-bookings
+// @access  Private
+export const getUserBookings = async (req, res) => {
+  try {
+    const bookings = await Booking.find({ user: req.user.id })
+      .populate('flight')
+      .sort({ createdAt: -1 })
+
+    res.json({
+      success: true,
+      count: bookings.length,
+      bookings
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching bookings',
+      error: error.message
+    })
+  }
+}
+
+// @desc    Get single booking
+// @route   GET /api/bookings/:id
+// @access  Private
+export const getBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
       .populate('flight')
-      .populate('user', 'name email');
-    
+      .populate('user', 'name email phone')
+
     if (!booking) {
       return res.status(404).json({
         success: false,
         message: 'Booking not found'
-      });
+      })
     }
-    
+
     // Check if user owns the booking or is admin
     if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to access this booking'
-      });
+      })
     }
-    
+
     res.json({
       success: true,
-      data: booking
-    });
+      booking
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Server Error',
+      message: 'Server error fetching booking',
       error: error.message
-    });
+    })
   }
-};
+}
 
-// Cancel booking
-exports.cancelBooking = async (req, res) => {
+// @desc    Cancel booking
+// @route   PUT /api/bookings/:id/cancel
+// @access  Private
+export const cancelBooking = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
-    
+    const booking = await Booking.findById(req.params.id).populate('flight')
+
     if (!booking) {
       return res.status(404).json({
         success: false,
         message: 'Booking not found'
-      });
+      })
     }
-    
+
     // Check if user owns the booking or is admin
     if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to cancel this booking'
-      });
+      })
     }
-    
-    // Check if booking can be cancelled (e.g., not too close to departure)
-    const flight = await Flight.findById(booking.flight);
-    const departureDate = new Date(flight.departureDate);
-    const now = new Date();
-    const hoursUntilDeparture = (departureDate - now) / (1000 * 60 * 60);
-    
-    if (hoursUntilDeparture < 24) {
+
+    // Check if booking can be cancelled
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Booking is already cancelled'
+      })
+    }
+
+    if (!booking.canBeCancelled()) {
       return res.status(400).json({
         success: false,
         message: 'Booking cannot be cancelled within 24 hours of departure'
-      });
+      })
     }
-    
+
     // Update booking status
-    booking.status = 'cancelled';
-    await booking.save();
-    
-    // Return seats to flight
-    flight.availableSeats += booking.passengers.length;
-    await flight.save();
-    
+    booking.status = 'cancelled'
+    booking.cancelledAt = new Date()
+    await booking.save()
+
+    // Return seats to available inventory
+    const flight = await Flight.findById(booking.flight._id)
+    await flight.updateAvailableSeats(booking.cabinClass, booking.passengers.length)
+
     res.json({
       success: true,
       message: 'Booking cancelled successfully',
-      data: booking
-    });
+      booking
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Server Error',
+      message: 'Server error cancelling booking',
       error: error.message
-    });
+    })
   }
-};
+}
 
-// Get all bookings (admin only)
-exports.getAllBookings = async (req, res) => {
+// @desc    Get all bookings (admin)
+// @route   GET /api/bookings
+// @access  Private/Admin
+export const getAllBookings = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    
-    const bookings = await Booking.find()
-      .populate('flight')
-      .populate('user', 'name email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-    
-    const total = await Booking.countDocuments();
-    
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      userId
+    } = req.query
+
+    const query = {}
+    if (status) query.status = status
+    if (userId) query.user = userId
+
+    const options = {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      sort: { createdAt: -1 },
+      populate: [
+        { path: 'flight', select: 'airline flightNumber origin destination departureTime' },
+        { path: 'user', select: 'name email phone' }
+      ]
+    }
+
+    const bookings = await Booking.find(query)
+      .sort(options.sort)
+      .limit(options.limit)
+      .skip((options.page - 1) * options.limit)
+      .populate(options.populate)
+
+    const total = await Booking.countDocuments(query)
+
     res.json({
       success: true,
       count: bookings.length,
       total,
-      page,
-      pages: Math.ceil(total / limit),
-      data: bookings
-    });
+      page: options.page,
+      pages: Math.ceil(total / options.limit),
+      bookings
+    })
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Server Error',
+      message: 'Server error fetching bookings',
       error: error.message
-    });
+    })
   }
-};
+}

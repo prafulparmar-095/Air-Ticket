@@ -1,186 +1,213 @@
 import { useState } from 'react'
 import { useApi } from '../hooks/useApi'
-import { validateCardNumber, validateExpiryDate, validateCVV } from '../utils/validators'
-import { toast } from 'react-toastify'
+import { CreditCard, CheckCircle, XCircle } from 'lucide-react'
+import LoadingSpinner from './LoadingSpinner'
 
-const Payment = ({ booking, onSuccess }) => {
-  const [paymentMethod, setPaymentMethod] = useState('credit_card')
+const Payment = ({ amount, bookingId, onSuccess }) => {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('card')
   const [cardDetails, setCardDetails] = useState({
     number: '',
     expiry: '',
     cvv: '',
     name: ''
   })
-  const [loading, setLoading] = useState(false)
   const api = useApi()
 
-  const handleCardChange = (e) => {
-    const { name, value } = e.target
+  const handleInputChange = (field, value) => {
     setCardDetails(prev => ({
       ...prev,
-      [name]: value
+      [field]: value
     }))
+    
+    if (error) setError('')
+  }
+
+  const formatCardNumber = (value) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '')
+    const matches = v.match(/\d{4,16}/g)
+    const match = matches && matches[0] || ''
+    const parts = []
+    
+    for (let i = 0; i < match.length; i += 4) {
+      parts.push(match.substring(i, i + 4))
+    }
+    
+    return parts.length ? parts.join(' ') : value
+  }
+
+  const formatExpiry = (value) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '')
+    if (v.length >= 3) {
+      return `${v.substring(0, 2)}/${v.substring(2, 4)}`
+    }
+    return value
+  }
+
+  const validateForm = () => {
+    if (!cardDetails.number || cardDetails.number.replace(/\s/g, '').length !== 16) {
+      return 'Please enter a valid 16-digit card number'
+    }
+    
+    if (!cardDetails.expiry || !cardDetails.expiry.includes('/')) {
+      return 'Please enter a valid expiry date (MM/YY)'
+    }
+    
+    if (!cardDetails.cvv || cardDetails.cvv.length !== 3) {
+      return 'Please enter a valid CVV'
+    }
+    
+    if (!cardDetails.name) {
+      return 'Please enter cardholder name'
+    }
+    
+    return null
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+    setError('')
 
-    // Validate card details
-    if (paymentMethod === 'credit_card' || paymentMethod === 'debit_card') {
-      if (!validateCardNumber(cardDetails.number)) {
-        toast.error('Please enter a valid card number')
-        setLoading(false)
-        return
-      }
-      if (!validateExpiryDate(cardDetails.expiry)) {
-        toast.error('Please enter a valid expiry date')
-        setLoading(false)
-        return
-      }
-      if (!validateCVV(cardDetails.cvv)) {
-        toast.error('Please enter a valid CVV')
-        setLoading(false)
-        return
-      }
-      if (!cardDetails.name.trim()) {
-        toast.error('Please enter cardholder name')
-        setLoading(false)
-        return
-      }
+    const validationError = validateForm()
+    if (validationError) {
+      setError(validationError)
+      setLoading(false)
+      return
     }
 
     try {
-      const response = await api.post('/payments/create', {
-        bookingId: booking._id,
-        amount: booking.totalAmount,
-        paymentMethod,
-        cardDetails: paymentMethod.includes('card') ? cardDetails : undefined
-      })
-
-      if (response.data.success) {
-        onSuccess(response.data.payment)
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Simulate successful payment 90% of the time
+      const isSuccess = Math.random() > 0.1
+      
+      if (isSuccess) {
+        // Confirm payment with backend
+        await api.post('/payments/confirm', {
+          paymentMethod: 'card',
+          bookingId,
+          amount
+        })
+        onSuccess()
       } else {
-        toast.error('Payment failed: ' + response.data.message)
+        throw new Error('Payment failed. Please try again with a different card.')
       }
-    } catch (error) {
-      toast.error('Payment failed. Please try again.')
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Payment failed. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="card">
-      <h2 className="text-2xl font-bold mb-6">Payment Details</h2>
-      
-      <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-        <div className="flex justify-between items-center">
-          <span className="text-lg font-semibold">Total Amount:</span>
-          <span className="text-2xl font-bold text-primary-600">
-            ${booking.totalAmount}
-          </span>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Payment Method
-          </label>
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            className="input-field"
-          >
-            <option value="credit_card">Credit Card</option>
-            <option value="debit_card">Debit Card</option>
-            <option value="paypal">PayPal</option>
-          </select>
-        </div>
-
-        {(paymentMethod === 'credit_card' || paymentMethod === 'debit_card') && (
-          <>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="card">
+        <h3 className="text-lg font-semibold mb-4 flex items-center">
+          <CreditCard className="h-5 w-5 mr-2" />
+          Payment Details
+        </h3>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Card Number
+            </label>
+            <input
+              type="text"
+              value={cardDetails.number}
+              onChange={(e) => handleInputChange('number', formatCardNumber(e.target.value))}
+              placeholder="1234 5678 9012 3456"
+              maxLength={19}
+              className="input-field"
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Card Number
+                Expiry Date
               </label>
               <input
                 type="text"
-                name="number"
-                value={cardDetails.number}
-                onChange={handleCardChange}
-                placeholder="1234 5678 9012 3456"
+                value={cardDetails.expiry}
+                onChange={(e) => handleInputChange('expiry', formatExpiry(e.target.value))}
+                placeholder="MM/YY"
+                maxLength={5}
                 className="input-field"
-                maxLength="19"
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Expiry Date
-                </label>
-                <input
-                  type="text"
-                  name="expiry"
-                  value={cardDetails.expiry}
-                  onChange={handleCardChange}
-                  placeholder="MM/YY"
-                  className="input-field"
-                  maxLength="5"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CVV
-                </label>
-                <input
-                  type="text"
-                  name="cvv"
-                  value={cardDetails.cvv}
-                  onChange={handleCardChange}
-                  placeholder="123"
-                  className="input-field"
-                  maxLength="4"
-                />
-              </div>
-            </div>
-
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Cardholder Name
+                CVV
               </label>
               <input
                 type="text"
-                name="name"
-                value={cardDetails.name}
-                onChange={handleCardChange}
-                placeholder="John Doe"
+                value={cardDetails.cvv}
+                onChange={(e) => handleInputChange('cvv', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                placeholder="123"
+                maxLength={3}
                 className="input-field"
               />
             </div>
-          </>
-        )}
-
-        {paymentMethod === 'paypal' && (
-          <div className="p-4 bg-yellow-50 rounded-lg">
-            <p className="text-yellow-800">
-              You will be redirected to PayPal to complete your payment.
-            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Cardholder Name
+            </label>
+            <input
+              type="text"
+              value={cardDetails.name}
+              onChange={(e) => handleInputChange('name', e.target.value)}
+              placeholder="John Doe"
+              className="input-field"
+            />
+          </div>
+        </div>
+        
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center">
+            <XCircle className="h-5 w-5 text-red-600 mr-2" />
+            <p className="text-red-600 text-sm">{error}</p>
           </div>
         )}
+      </div>
 
+      <div className="card">
+        <div className="flex justify-between items-center mb-4">
+          <span className="text-gray-600">Total Amount:</span>
+          <span className="text-xl font-bold text-primary-600">
+            ${amount.toFixed(2)}
+          </span>
+        </div>
+        
         <button
           type="submit"
           disabled={loading}
-          className="w-full btn-primary disabled:opacity-50"
+          className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
         >
-          {loading ? 'Processing...' : `Pay $${booking.totalAmount}`}
+          {loading ? (
+            <>
+              <LoadingSpinner size="small" />
+              <span className="ml-2">Processing...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle className="h-5 w-5 mr-2" />
+              <span>Pay Now</span>
+            </>
+          )}
         </button>
-      </form>
-    </div>
+        
+        <p className="text-xs text-gray-500 mt-4 text-center">
+          This is a demo payment. No real transaction will be processed.
+        </p>
+      </div>
+    </form>
   )
 }
 

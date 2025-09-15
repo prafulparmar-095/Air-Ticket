@@ -1,44 +1,24 @@
-const express = require('express')
-const Booking = require('../models/Booking')
-const Flight = require('../models/Flight')
+import express from 'express'
+import {
+  createBooking,
+  getUserBookings,
+  getBooking,
+  cancelBooking,
+  getAllBookings
+} from '../controllers/bookingController.js'
+import { authenticate, authorize } from '../middleware/auth.js'
+import { validateBooking, handleValidationErrors } from '../middleware/validation.js'
+
 const router = express.Router()
 
-// Create booking
-router.post('/', async (req, res) => {
-  try {
-    const { flightId, passengers } = req.body
+router.use(authenticate)
 
-    const flight = await Flight.findById(flightId)
-    if (!flight) {
-      return res.status(404).json({ message: 'Flight not found' })
-    }
+router.post('/', validateBooking, handleValidationErrors, createBooking)
+router.get('/my-bookings', getUserBookings)
+router.get('/:id', getBooking)
+router.put('/:id/cancel', cancelBooking)
 
-    const booking = new Booking({
-      flight: flightId,
-      passengers,
-      totalAmount: flight.price * passengers.length
-    })
+// Admin routes
+router.get('/', authorize('admin'), getAllBookings)
 
-    await booking.save()
-    await booking.populate('flight')
-
-    res.status(201).json(booking)
-  } catch (error) {
-    console.error('Create booking error:', error)
-    res.status(500).json({ message: 'Server error' })
-  }
-})
-
-// Get user bookings
-router.get('/user/:userId', async (req, res) => {
-  try {
-    const bookings = await Booking.find({ user: req.params.userId })
-      .populate('flight')
-    res.json(bookings)
-  } catch (error) {
-    console.error('Get bookings error:', error)
-    res.status(500).json({ message: 'Server error' })
-  }
-})
-
-module.exports = router
+export default router

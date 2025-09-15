@@ -1,114 +1,80 @@
-// backend/models/User.js
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+import mongoose from 'mongoose'
+import bcrypt from 'bcryptjs'
 
-const UserSchema = new mongoose.Schema({
+const userSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, 'Please add a name'],
+    required: [true, 'Name is required'],
     trim: true,
     maxlength: [50, 'Name cannot be more than 50 characters']
   },
   email: {
     type: String,
-    required: [true, 'Please add an email'],
+    required: [true, 'Email is required'],
     unique: true,
-    match: [
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-      'Please add a valid email'
-    ]
-  },
-  password: {
-    type: String,
-    required: [true, 'Please add a password'],
-    minlength: 6,
-    select: false
+    lowercase: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
   phone: {
     type: String,
-    trim: true
+    required: [true, 'Phone number is required'],
+    match: [/^\+?[1-9]\d{1,14}$/, 'Please enter a valid phone number']
   },
-  address: {
-    street: String,
-    city: String,
-    state: String,
-    zipCode: String,
-    country: String
+  password: {
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: [6, 'Password must be at least 6 characters'],
+    select: false
   },
   role: {
     type: String,
     enum: ['user', 'admin'],
     default: 'user'
   },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
   dateOfBirth: {
     type: Date
   },
   passportNumber: {
-    type: String,
-    trim: true
+    type: String
   },
-  nationality: {
-    type: String,
-    trim: true
+  passportExpiry: {
+    type: Date
   },
-  loyaltyPoints: {
-    type: Number,
-    default: 0
-  },
-  preferences: {
-    seat: String,
-    meal: {
-      type: String,
-      enum: ['regular', 'vegetarian', 'vegan', 'gluten-free', 'none'],
-      default: 'regular'
-    },
-    newsletter: {
-      type: Boolean,
-      default: true
-    }
-  }
+  bookings: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Booking'
+  }]
 }, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  timestamps: true
+})
 
-// Encrypt password using bcrypt
-UserSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    next();
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next()
+  
+  try {
+    const salt = await bcrypt.genSalt(12)
+    this.password = await bcrypt.hash(this.password, salt)
+    next()
+  } catch (error) {
+    next(error)
   }
+})
 
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-});
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password)
+}
 
-// Sign JWT and return
-UserSchema.methods.getSignedJwtToken = function() {
-  return jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
-  });
-};
+// Remove password from JSON output
+userSchema.methods.toJSON = function() {
+  const user = this.toObject()
+  delete user.password
+  return user
+}
 
-// Match user entered password to hashed password in database
-UserSchema.methods.matchPassword = async function(enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
-
-// Cascade delete bookings when a user is deleted
-UserSchema.pre('remove', async function(next) {
-  console.log(`Bookings being removed for user ${this._id}`);
-  await this.model('Booking').deleteMany({ user: this._id });
-  next();
-});
-
-// Reverse populate with virtuals
-UserSchema.virtual('bookings', {
-  ref: 'Booking',
-  localField: '_id',
-  foreignField: 'user',
-  justOne: false
-});
-
-module.exports = mongoose.model('User', UserSchema);
+export default mongoose.model('User', userSchema)

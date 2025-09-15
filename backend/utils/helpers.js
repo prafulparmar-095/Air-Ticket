@@ -1,28 +1,66 @@
-const generateBookingReference = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+import jwt from 'jsonwebtoken'
+
+// Generate JWT Token
+export const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE
+  })
+}
+
+// Generate random string
+export const generateRandomString = (length = 8) => {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   let result = ''
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length))
   }
   return result
 }
 
-const formatFlightDuration = (departure, arrival) => {
-  const diff = new Date(arrival) - new Date(departure)
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-  return `${hours}h ${minutes}m`
+// Format currency
+export const formatCurrency = (amount, currency = 'USD') => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency,
+  }).format(amount)
 }
 
-const calculateFlightPrice = (basePrice, travelClass, passengers) => {
-  let multiplier = 1
-  if (travelClass === 'business') multiplier = 1.5
-  if (travelClass === 'first') multiplier = 2.5
-  return basePrice * multiplier * passengers
+// Calculate flight duration
+export const calculateDuration = (departureTime, arrivalTime) => {
+  const departure = new Date(departureTime)
+  const arrival = new Date(arrivalTime)
+  return Math.round((arrival - departure) / (1000 * 60)) // in minutes
 }
 
-module.exports = {
-  generateBookingReference,
-  formatFlightDuration,
-  calculateFlightPrice
+// Validate email
+export const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+// Validate phone number
+export const isValidPhone = (phone) => {
+  const phoneRegex = /^\+?[1-9]\d{1,14}$/
+  return phoneRegex.test(phone)
+}
+
+// Pagination helper
+export const paginate = (array, page = 1, limit = 10) => {
+  const startIndex = (page - 1) * limit
+  const endIndex = page * limit
+  
+  const results = {}
+  results.total = array.length
+  results.pages = Math.ceil(array.length / limit)
+  
+  if (endIndex < array.length) {
+    results.next = page + 1
+  }
+  
+  if (startIndex > 0) {
+    results.previous = page - 1
+  }
+  
+  results.data = array.slice(startIndex, endIndex)
+  return results
 }

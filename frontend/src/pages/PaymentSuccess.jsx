@@ -1,102 +1,180 @@
-// frontend/src/pages/PaymentSuccess.jsx
-import { useEffect } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useApi } from '../hooks/useApi'
+import { CheckCircle, Download, Mail, Calendar, MapPin, Users } from 'lucide-react'
+import { formatDate, formatTime, formatCurrency } from '../utils/formatters'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 const PaymentSuccess = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { booking, flight } = location.state || {};
+  const [booking, setBooking] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const api = useApi()
+
+  const bookingId = location.state?.bookingId
 
   useEffect(() => {
-    if (!booking || !flight) {
-      navigate('/');
+    if (!bookingId) {
+      navigate('/')
+      return
     }
-  }, [booking, flight, navigate]);
 
-  if (!booking || !flight) {
+    fetchBooking()
+  }, [bookingId])
+
+  const fetchBooking = async () => {
+    try {
+      const response = await api.get(`/bookings/${bookingId}`)
+      setBooking(response.data.booking)
+    } catch (error) {
+      console.error('Error fetching booking:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDownloadTicket = async () => {
+    try {
+      const response = await api.get(`/bookings/${bookingId}/ticket`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `ticket-${bookingId}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      console.error('Error downloading ticket:', error)
+    }
+  }
+
+  const handleEmailTicket = async () => {
+    try {
+      await api.post(`/bookings/${bookingId}/send-ticket`)
+      alert('Ticket has been sent to your email!')
+    } catch (error) {
+      console.error('Error sending ticket:', error)
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="large" />
       </div>
-    );
+    )
+  }
+
+  if (!booking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Booking not found</h1>
+          <Link to="/" className="btn-primary">
+            Go Home
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-2xl mx-auto text-center">
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-6">
-          <div className="flex items-center justify-center mb-2">
-            <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
-              <span className="text-2xl text-white">✓</span>
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold mb-2">Payment Successful!</h1>
-          <p>Your flight has been booked successfully.</p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4">Booking Confirmation</h2>
-          
-          <div className="mb-4">
-            <p className="text-lg font-semibold">Booking Reference</p>
-            <p className="text-2xl font-bold text-blue-600">{booking.bookingReference}</p>
-          </div>
-
-          <div className="mb-4">
-            <h3 className="font-semibold mb-2">Flight Details</h3>
-            <p><strong>{flight.airline}</strong> {flight.number}</p>
-            <p>{flight.origin} → {flight.destination}</p>
-            <p>Departure: {new Date(flight.departureTime).toLocaleString()}</p>
-          </div>
-
-          <div className="mb-4">
-            <h3 className="font-semibold mb-2">Passengers</h3>
-            {booking.passengers.map((passenger, index) => (
-              <div key={index} className="mb-2">
-                <p>{passenger.firstName} {passenger.lastName}</p>
-                {passenger.seat && <p className="text-sm text-gray-600">Seat: {passenger.seat}</p>}
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t pt-4">
-            <h3 className="font-semibold mb-2">Payment Details</h3>
-            <p className="text-lg font-bold">Total Paid: ${booking.fareDetails.totalAmount}</p>
-            <p className="text-sm text-gray-600">Payment Status: {booking.payment?.status || 'completed'}</p>
-          </div>
-        </div>
-
-        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
-          <h3 className="font-semibold mb-2">What's Next?</h3>
-          <p className="text-sm text-blue-800">
-            You will receive a confirmation email shortly with your e-ticket and boarding pass.
-            Please check-in online 24 hours before your flight.
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-8">
+          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Payment Successful!
+          </h1>
+          <p className="text-gray-600">
+            Your booking has been confirmed. Here are your booking details.
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link
-            to="/"
-            className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Back to Home
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h2 className="text-xl font-semibold mb-2">Booking Confirmation</h2>
+              <p className="text-gray-600">Booking ID: {booking._id}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-primary-600">
+                {formatCurrency(booking.totalAmount)}
+              </p>
+              <p className="text-sm text-gray-600">Paid on {formatDate(booking.createdAt)}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-medium mb-3 flex items-center">
+                <MapPin className="h-5 w-5 text-primary-600 mr-2" />
+                Flight Details
+              </h3>
+              <p className="font-semibold">
+                {booking.flight.origin} → {booking.flight.destination}
+              </p>
+              <p className="text-gray-600">{booking.flight.airline} • {booking.flight.flightNumber}</p>
+              <p className="text-gray-600 capitalize">{booking.cabinClass.replace('_', ' ')} Class</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-medium mb-3 flex items-center">
+                <Calendar className="h-5 w-5 text-primary-600 mr-2" />
+                Departure
+              </h3>
+              <p className="font-semibold">{formatDate(booking.flight.departureTime)}</p>
+              <p className="text-gray-600">
+                {formatTime(booking.flight.departureTime)} - {formatTime(booking.flight.arrivalTime)}
+              </p>
+              <p className="text-gray-600">Duration: {Math.floor(booking.flight.duration / 60)}h {booking.flight.duration % 60}m</p>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <h3 className="font-medium mb-3 flex items-center">
+              <Users className="h-5 w-5 text-primary-600 mr-2" />
+              Passengers
+            </h3>
+            <div className="space-y-2">
+              {booking.passengers.map((passenger, index) => (
+                <p key={index} className="text-gray-600">
+                  {passenger.firstName} {passenger.lastName} ({passenger.type})
+                </p>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex space-x-4">
+            <button
+              onClick={handleDownloadTicket}
+              className="flex items-center space-x-2 btn-primary"
+            >
+              <Download className="h-5 w-5" />
+              <span>Download Ticket</span>
+            </button>
+            <button
+              onClick={handleEmailTicket}
+              className="flex items-center space-x-2 btn-secondary"
+            >
+              <Mail className="h-5 w-5" />
+              <span>Email Ticket</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="text-center">
+          <Link to="/profile" className="text-primary-600 hover:text-primary-700 font-medium">
+            View all bookings in your profile →
           </Link>
-          <Link
-            to="/profile"
-            className="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 transition-colors"
-          >
-            View My Bookings
-          </Link>
-          <button
-            onClick={() => window.print()}
-            className="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 transition-colors"
-          >
-            Print Confirmation
-          </button>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default PaymentSuccess;
+export default PaymentSuccess

@@ -1,8 +1,10 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useApi } from '../hooks/useApi'
 
-export const AuthContext = createContext()   // <-- export it here
+// Create and export the context
+export const AuthContext = createContext()
 
+// Custom hook for using the auth context
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (!context) {
@@ -11,6 +13,7 @@ export const useAuth = () => {
   return context
 }
 
+// Auth provider component
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -19,7 +22,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
-      api.get('/auth/verify')
+      api.get('/auth/me')
         .then(response => {
           setUser(response.data.user)
         })
@@ -83,3 +86,6 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   )
 }
+
+// Export default for easier imports
+export default AuthContext

@@ -1,25 +1,27 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+export const CITIES = [
+  'New York', 'London', 'Paris', 'Tokyo', 'Dubai', 'Singapore', 'Sydney',
+  'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune'
+]
 
-export const FLIGHT_CLASS = {
-  ECONOMY: 'economy',
-  BUSINESS: 'business',
-  FIRST: 'first'
-}
+export const AIRCRAFTS = [
+  'Boeing 737',
+  'Boeing 777',
+  'Boeing 787',
+  'Airbus A320',
+  'Airbus A330',
+  'Airbus A350',
+  'Airbus A380'
+]
 
-export const PASSENGER_TYPES = {
-  ADULT: 'adult',
-  CHILD: 'child',
-  INFANT: 'infant'
-}
+export const CABIN_CLASSES = [
+  { value: 'economy', label: 'Economy' },
+  { value: 'premium_economy', label: 'Premium Economy' },
+  { value: 'business', label: 'Business' },
+  { value: 'first', label: 'First Class' }
+]
 
-export const PAYMENT_METHODS = {
-  CREDIT_CARD: 'credit_card',
-  DEBIT_CARD: 'debit_card',
-  PAYPAL: 'paypal'
-}
-
-export const BOOKING_STATUS = {
-  PENDING: 'pending',
-  CONFIRMED: 'confirmed',
-  CANCELLED: 'cancelled'
-}
+export const PASSENGER_TYPES = [
+  { value: 'adult', label: 'Adult (12+ years)' },
+  { value: 'child', label: 'Child (2-12 years)' },
+  { value: 'infant', label: 'Infant (under 2 years)' }
+]

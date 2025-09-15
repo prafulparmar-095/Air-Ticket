@@ -1,17 +1,17 @@
 const LoadingSpinner = ({ size = 'medium' }) => {
   const sizeClasses = {
-    small: 'w-4 h-4',
-    medium: 'w-8 h-8',
-    large: 'w-12 h-12'
+    small: 'h-6 w-6',
+    medium: 'h-8 w-8',
+    large: 'h-12 w-12'
   }
 
   return (
-    <div className="flex justify-center items-center">
+    <div className="flex items-center justify-center">
       <div
-        className={`${sizeClasses[size]} border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin`}
+        className={`animate-spin rounded-full border-b-2 border-primary-600 ${sizeClasses[size]}`}
       ></div>
     </div>
   )
 }
 
-export default LoadingSpinner
+export default LoadingSpinner;

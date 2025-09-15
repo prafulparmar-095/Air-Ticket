@@ -1,121 +1,129 @@
-// backend/models/Booking.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose'
 
-const BookingSchema = new mongoose.Schema({
+const passengerSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    enum: ['adult', 'child', 'infant'],
+    required: true
+  },
+  firstName: {
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true
+  },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other'],
+    required: true
+  },
+  dateOfBirth: {
+    type: Date,
+    required: true
+  },
+  passportNumber: {
+    type: String,
+    trim: true
+  },
+  passportExpiry: {
+    type: Date
+  }
+})
+
+const bookingSchema = new mongoose.Schema({
   bookingReference: {
     type: String,
-    required: true,
-    unique: true
+    unique: true,
+    required: true
   },
   user: {
-    type: mongoose.Schema.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
   flight: {
-    type: mongoose.Schema.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Flight',
     required: true
   },
-  passengers: [{
-    firstName: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    lastName: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    dateOfBirth: {
-      type: Date,
-      required: true
-    },
-    gender: {
-      type: String,
-      enum: ['male', 'female', 'other'],
-      required: true
-    },
-    passportNumber: {
-      type: String,
-      trim: true
-    },
-    nationality: {
-      type: String,
-      trim: true
-    },
-    seat: {
-      type: String,
-      trim: true
-    },
-    baggage: {
-      checked: { type: Number, default: 0 },
-      cabin: { type: Number, default: 1 }
-    },
-    specialAssistance: {
-      type: Boolean,
-      default: false
-    },
-    mealPreference: {
-      type: String,
-      enum: ['regular', 'vegetarian', 'vegan', 'gluten-free'],
-      default: 'regular'
-    }
-  }],
-  contactDetails: {
+  passengers: [passengerSchema],
+  contactInfo: {
     email: {
       type: String,
-      required: true
+      required: [true, 'Email is required'],
+      lowercase: true
     },
     phone: {
       type: String,
-      required: true
+      required: [true, 'Phone number is required']
     }
   },
-  fareDetails: {
-    baseFare: { type: Number, required: true },
-    tax: { type: Number, required: true },
-    baggageFee: { type: Number, default: 0 },
-    seatSelectionFee: { type: Number, default: 0 },
-    totalAmount: { type: Number, required: true }
+  cabinClass: {
+    type: String,
+    enum: ['economy', 'premium_economy', 'business', 'first'],
+    required: true
   },
-  payment: {
-    status: {
-      type: String,
-      enum: ['pending', 'completed', 'failed'],
-      default: 'pending'
-    }
+  totalAmount: {
+    type: Number,
+    required: [true, 'Total amount is required'],
+    min: [0, 'Total amount cannot be negative']
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'cancelled'],
+    enum: ['pending', 'confirmed', 'cancelled', 'refunded'],
     default: 'pending'
-  }
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed', 'refunded'],
+    default: 'pending'
+  },
+  paymentIntentId: {
+    type: String
+  },
+  cancellationReason: {
+    type: String,
+    trim: true
+  },
+  cancelledAt: {
+    type: Date
+  },
+  seatNumbers: [{
+    type: String,
+    trim: true
+  }]
 }, {
   timestamps: true
-});
+})
 
 // Generate booking reference before saving
-BookingSchema.pre('save', async function(next) {
-  if (!this.bookingReference) {
-    let isUnique = false;
-    let reference;
-    
-    while (!isUnique) {
-      // Generate a 6-character alphanumeric reference
-      reference = Math.random().toString(36).substring(2, 8).toUpperCase();
-      
-      // Check if it's unique
-      const existingBooking = await mongoose.model('Booking').findOne({ bookingReference: reference });
-      if (!existingBooking) {
-        isUnique = true;
-      }
-    }
-    
-    this.bookingReference = reference;
+bookingSchema.pre('save', async function(next) {
+  if (this.isNew && !this.bookingReference) {
+    const count = await mongoose.model('Booking').countDocuments()
+    this.bookingReference = `BK${(count + 1).toString().padStart(6, '0')}`
   }
-  next();
-});
+  next()
+})
 
-module.exports = mongoose.model('Booking', BookingSchema);
+// Index for user bookings
+bookingSchema.index({ user: 1, createdAt: -1 })
+bookingSchema.index({ bookingReference: 1 })
+
+// Virtual for passenger count
+bookingSchema.virtual('passengerCount').get(function() {
+  return this.passengers.length
+})
+
+// Method to check if booking can be cancelled
+bookingSchema.methods.canBeCancelled = function() {
+  const departureTime = new Date(this.flight.departureTime)
+  const now = new Date()
+  const hoursUntilDeparture = (departureTime - now) / (1000 * 60 * 60)
+  return hoursUntilDeparture > 24 // Can cancel if more than 24 hours before departure
+}
+
+export default mongoose.model('Booking', bookingSchema)

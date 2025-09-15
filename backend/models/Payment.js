@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+import mongoose from 'mongoose'
 
 const paymentSchema = new mongoose.Schema({
   booking: {
@@ -11,42 +11,60 @@ const paymentSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  
   amount: {
     type: Number,
-    required: true,
-    min: 0
+    required: [true, 'Amount is required'],
+    min: [0, 'Amount cannot be negative']
   },
   currency: {
     type: String,
-    default: 'USD'
+    default: 'USD',
+    uppercase: true
+  },
+  paymentIntentId: {
+    type: String,
+    required: true,
+    unique: true
   },
   paymentMethod: {
     type: String,
-    enum: ['credit_card', 'debit_card', 'paypal'],
     required: true
   },
   status: {
     type: String,
-    enum: ['pending', 'completed', 'failed', 'refunded'],
+    enum: ['pending', 'succeeded', 'failed', 'refunded'],
     default: 'pending'
   },
-  transactionId: {
-    type: String,
-    unique: true
+  refundAmount: {
+    type: Number,
+    default: 0,
+    min: [0, 'Refund amount cannot be negative']
   },
-  cardDetails: {
-    last4: String,
-    brand: String,
-    expMonth: Number,
-    expYear: Number
-  },
-  paymentGateway: {
+  refundReason: {
     type: String,
-    default: 'stripe'
+    trim: true
+  },
+  metadata: {
+    type: Map,
+    of: String
   }
 }, {
   timestamps: true
 })
 
-module.exports = mongoose.model('Payment', paymentSchema)
+// Index for user payments and booking payments
+paymentSchema.index({ user: 1, createdAt: -1 })
+paymentSchema.index({ booking: 1 })
+paymentSchema.index({ paymentIntentId: 1 })
+
+// Virtual for formatted amount
+paymentSchema.virtual('formattedAmount').get(function() {
+  return (this.amount / 100).toFixed(2) // Assuming amount is in cents
+})
+
+// Method to check if payment can be refunded
+paymentSchema.methods.canBeRefunded = function() {
+  return this.status === 'succeeded' && this.refundAmount < this.amount
+}
+
+export default mongoose.model('Payment', paymentSchema)

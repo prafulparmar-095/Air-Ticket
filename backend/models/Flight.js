@@ -1,133 +1,101 @@
-// backend/models/Flight.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose'
 
-const FlightSchema = new mongoose.Schema({
+const flightSchema = new mongoose.Schema({
   airline: {
     type: String,
-    required: [true, 'Please add an airline'],
+    required: [true, 'Airline is required'],
     trim: true
   },
-  number: {
+  flightNumber: {
     type: String,
-    required: [true, 'Please add a flight number'],
-    unique: true,
+    required: [true, 'Flight number is required'],
     trim: true
   },
   origin: {
     type: String,
-    required: [true, 'Please add an origin'],
+    required: [true, 'Origin is required'],
     trim: true
   },
   destination: {
     type: String,
-    required: [true, 'Please add a destination'],
+    required: [true, 'Destination is required'],
     trim: true
   },
   departureTime: {
     type: Date,
-    required: [true, 'Please add a departure time']
+    required: [true, 'Departure time is required']
   },
   arrivalTime: {
     type: Date,
-    required: [true, 'Please add an arrival time']
+    required: [true, 'Arrival time is required']
   },
   duration: {
-    type: String,
-    required: [true, 'Please add a duration']
+    type: Number, // in minutes
+    required: [true, 'Duration is required']
+  },
+  price: {
+    type: Number,
+    required: [true, 'Price is required'],
+    min: [0, 'Price cannot be negative']
+  },
+  stops: {
+    type: Number,
+    default: 0,
+    min: [0, 'Stops cannot be negative']
+  },
+  availableSeats: {
+    economy: {
+      type: Number,
+      default: 0,
+      min: [0, 'Available seats cannot be negative']
+    },
+    premium_economy: {
+      type: Number,
+      default: 0,
+      min: [0, 'Available seats cannot be negative']
+    },
+    business: {
+      type: Number,
+      default: 0,
+      min: [0, 'Available seats cannot be negative']
+    },
+    first: {
+      type: Number,
+      default: 0,
+      min: [0, 'Available seats cannot be negative']
+    }
   },
   aircraft: {
     type: String,
-    required: [true, 'Please add an aircraft type']
+    trim: true
   },
   status: {
     type: String,
-    enum: ['scheduled', 'boarding', 'departed', 'in-air', 'landed', 'delayed', 'cancelled'],
+    enum: ['scheduled', 'boarding', 'departed', 'arrived', 'delayed', 'cancelled'],
     default: 'scheduled'
-  },
-  gate: {
-    type: String,
-    trim: true
-  },
-  terminal: {
-    type: String,
-    trim: true
-  },
-  economySeats: {
-    total: { type: Number, default: 0 },
-    available: { type: Number, default: 0 },
-    price: { type: Number, required: true }
-  },
-  premiumEconomySeats: {
-    total: { type: Number, default: 0 },
-    available: { type: Number, default: 0 },
-    price: { type: Number, default: 0 }
-  },
-  businessSeats: {
-    total: { type: Number, default: 0 },
-    available: { type: Number, default: 0 },
-    price: { type: Number, default: 0 }
-  },
-  firstClassSeats: {
-    total: { type: Number, default: 0 },
-    available: { type: Number, default: 0 },
-    price: { type: Number, default: 0 }
-  },
-  seatMap: {
-    economy: {
-      rows: Number,
-      cols: Number,
-      seatLetters: [String],
-      blockedSeats: [String]
-    },
-    premiumEconomy: {
-      rows: Number,
-      cols: Number,
-      seatLetters: [String],
-      blockedSeats: [String]
-    },
-    business: {
-      rows: Number,
-      cols: Number,
-      seatLetters: [String],
-      blockedSeats: [String]
-    },
-    firstClass: {
-      rows: Number,
-      cols: Number,
-      seatLetters: [String],
-      blockedSeats: [String]
-    }
-  },
-  hasWiFi: { type: Boolean, default: false },
-  hasEntertainment: { type: Boolean, default: false },
-  hasPowerOutlets: { type: Boolean, default: false },
-  mealService: { type: Boolean, default: false },
-  onTimePerformance: { type: Number, default: 0 },
-  averageDelay: { type: Number, default: 0 },
-  createdBy: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  updatedBy: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'User'
   }
 }, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  timestamps: true
+})
 
-// Pre-save middleware to calculate duration
-FlightSchema.pre('save', function(next) {
-  if (this.departureTime && this.arrivalTime) {
-    const durationMs = this.arrivalTime - this.departureTime;
-    const hours = Math.floor(durationMs / (1000 * 60 * 60));
-    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-    this.duration = `${hours}h ${minutes}m`;
-  }
-  next();
-});
+// Index for search optimization
+flightSchema.index({ origin: 1, destination: 1, departureTime: 1 })
+flightSchema.index({ airline: 1, flightNumber: 1 })
 
-module.exports = mongoose.model('Flight', FlightSchema);
+// Virtual for checking if flight is in the past
+flightSchema.virtual('isPast').get(function() {
+  return this.departureTime < new Date()
+})
+
+// Method to check seat availability
+flightSchema.methods.hasAvailableSeats = function(cabinClass, passengers) {
+  return this.availableSeats[cabinClass] >= passengers
+}
+
+// Method to update available seats
+flightSchema.methods.updateAvailableSeats = function(cabinClass, count) {
+  this.availableSeats[cabinClass] += count
+  return this.save()
+}
+
+export default mongoose.model('Flight', flightSchema)

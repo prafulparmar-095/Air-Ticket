@@ -1,31 +1,24 @@
-// backend/routes/flights.js
-const express = require('express');
-const {
+import express from 'express'
+import {
+  searchFlights,
   getFlights,
   getFlight,
   createFlight,
   updateFlight,
-  deleteFlight,
-  searchFlights,
-  getAvailableSeats
-} = require('../controllers/flightController');
-const { protect, authorize } = require('../middleware/auth');
+  deleteFlight
+} from '../controllers/flightController.js'
+import { authenticate, authorize } from '../middleware/auth.js'
+import { validateFlightSearch, handleValidationErrors } from '../middleware/validation.js'
 
-const router = express.Router();
+const router = express.Router()
 
-router.route('/')
-  .get(getFlights)
-  .post(protect, authorize('admin'), createFlight);
+router.get('/search', validateFlightSearch, handleValidationErrors, searchFlights)
+router.get('/', getFlights)
+router.get('/:id', getFlight)
 
-router.route('/:id')
-  .get(getFlight)
-  .put(protect, authorize('admin'), updateFlight)
-  .delete(protect, authorize('admin'), deleteFlight);
+// Admin routes
+router.post('/', authenticate, authorize('admin'), createFlight)
+router.put('/:id', authenticate, authorize('admin'), updateFlight)
+router.delete('/:id', authenticate, authorize('admin'), deleteFlight)
 
-router.route('/search')
-  .post(searchFlights);
-
-router.route('/:id/seats')
-  .get(getAvailableSeats);
-
-module.exports = router;
+export default router

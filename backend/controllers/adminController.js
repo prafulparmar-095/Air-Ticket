@@ -1,88 +1,34 @@
-// backend/controllers/adminController.js
-const Booking = require('../models/Booking');
-const Flight = require('../models/Flight');
-const User = require('../models/User');
-const asyncHandler = require('../middleware/asyncHandler');
+import User from '../models/User.js'
+import Flight from '../models/Flight.js'
+import Booking from '../models/Booking.js'
+import Payment from '../models/Payment.js'
 
-// @desc    Get admin dashboard statistics
+// @desc    Get admin dashboard stats
 // @route   GET /api/admin/stats
 // @access  Private/Admin
-exports.getAdminStats = asyncHandler(async (req, res, next) => {
+export const getDashboardStats = async (req, res) => {
   try {
-    const totalBookings = await Booking.countDocuments();
-    
-    const totalRevenueResult = await Booking.aggregate([
-      { $match: { status: 'confirmed' } },
-      { $group: { _id: null, total: { $sum: '$fareDetails.totalAmount' } } }
-    ]);
-    
-    const totalRevenue = totalRevenueResult[0]?.total || 0;
-    
-    const activeFlights = await Flight.countDocuments({ 
-      departureTime: { $gte: new Date() } 
-    });
-    
-    const registeredUsers = await User.countDocuments();
+    // Total counts
+    const totalUsers = await User.countDocuments()
+    const totalFlights = await Flight.countDocuments()
+    const totalBookings = await Booking.countDocuments()
 
-    res.status(200).json({
-      success: true,
-      data: {
-        totalBookings,
-        totalRevenue,
-        activeFlights,
-        registeredUsers
-      }
-    });
-  } catch (error) {
-    console.error('Error in getAdminStats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
-
-// @desc    Get analytics data
-// @route   GET /api/admin/analytics
-// @access  Private/Admin
-exports.getAnalytics = asyncHandler(async (req, res, next) => {
-  try {
-    // Calculate revenue
+    // Revenue calculation
     const revenueResult = await Booking.aggregate([
       { $match: { status: 'confirmed' } },
-      { $group: { _id: null, total: { $sum: '$fareDetails.totalAmount' } } }
-    ]);
-    
-    const totalRevenue = revenueResult[0]?.total || 0;
+      { $group: { _id: null, totalRevenue: { $sum: '$totalAmount' } } }
+    ])
+    const totalRevenue = revenueResult[0]?.totalRevenue || 0
 
-    // Get total bookings
-    const totalBookings = await Booking.countDocuments({ status: 'confirmed' });
+    // Recent bookings
+    const recentBookings = await Booking.find()
+      .populate('flight', 'origin destination airline')
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(5)
 
-    // Get total users
-    const totalUsers = await User.countDocuments();
-
-    // Get top routes (simplified version)
-    const topRoutes = await Booking.aggregate([
-      { $match: { status: 'confirmed' } },
-      { $group: { 
-        _id: '$flight',
-        bookings: { $sum: 1 }
-      }},
-      { $sort: { bookings: -1 } },
-      { $limit: 5 },
-      {
-        $lookup: {
-          from: 'flights',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'flightData'
-        }
-      },
-      { $unwind: '$flightData' }
-    ]);
-
-    // Get popular airlines (simplified version)
-    const popularAirlines = await Booking.aggregate([
+    // Popular routes
+    const popularRoutes = await Booking.aggregate([
       { $match: { status: 'confirmed' } },
       {
         $lookup: {
@@ -93,97 +39,239 @@ exports.getAnalytics = asyncHandler(async (req, res, next) => {
         }
       },
       { $unwind: '$flightData' },
-      { $group: { 
-        _id: '$flightData.airline',
-        bookings: { $sum: 1 }
-      }},
-      { $sort: { bookings: -1 } },
+      {
+        $group: {
+          _id: {
+            origin: '$flightData.origin',
+            destination: '$flightData.destination'
+          },
+          count: { $sum: 1 },
+          totalRevenue: { $sum: '$totalAmount' }
+        }
+      },
+      { $sort: { count: -1 } },
       { $limit: 5 }
-    ]);
+    ])
 
-    res.status(200).json({
+    res.json({
       success: true,
-      data: {
-        revenue: {
-          total: totalRevenue,
-          change: 12
-        },
-        bookings: {
-          total: totalBookings,
-          change: 8
-        },
-        users: {
-          total: totalUsers,
-          change: 5
-        },
-        topRoutes: topRoutes.map(route => ({
-          origin: route.flightData?.origin || 'Unknown',
-          destination: route.flightData?.destination || 'Unknown',
-          bookings: route.bookings
-        })),
-        popularAirlines: popularAirlines.map(airline => ({
-          name: airline._id,
-          bookings: airline.bookings
-        }))
+      stats: {
+        totalUsers,
+        totalFlights,
+        totalBookings,
+        totalRevenue,
+        recentBookings,
+        popularRoutes
       }
-    });
+    })
   } catch (error) {
-    console.error('Error in getAnalytics:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
-    });
+      message: 'Server error fetching dashboard stats',
+      error: error.message
+    })
   }
-});
+}
 
-// @desc    Get recent bookings
-// @route   GET /api/admin/recent-bookings
+// @desc    Get financial reports
+// @route   GET /api/admin/reports/financial
 // @access  Private/Admin
-exports.getRecentBookings = asyncHandler(async (req, res, next) => {
+export const getFinancialReports = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 5;
-    
-    const bookings = await Booking.find()
-      .populate('flight', 'number origin destination departureTime')
-      .populate('user', 'name email')
-      .sort('-createdAt')
-      .limit(limit);
+    const { startDate, endDate, groupBy = 'month' } = req.query
 
-    res.status(200).json({
+    const matchStage = {}
+    if (startDate && endDate) {
+      matchStage.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    }
+
+    let groupFormat
+    switch (groupBy) {
+      case 'day':
+        groupFormat = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } }
+        break
+      case 'week':
+        groupFormat = { year: { $year: '$createdAt' }, week: { $week: '$createdAt' } }
+        break
+      case 'month':
+      default:
+        groupFormat = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } }
+    }
+
+    const financialReport = await Booking.aggregate([
+      { $match: { ...matchStage, status: 'confirmed' } },
+      {
+        $group: {
+          _id: groupFormat,
+          totalBookings: { $sum: 1 },
+          totalRevenue: { $sum: '$totalAmount' },
+          averageBookingValue: { $avg: '$totalAmount' }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.week': 1 } }
+    ])
+
+    res.json({
       success: true,
-      count: bookings.length,
-      data: bookings
-    });
+      report: financialReport
+    })
   } catch (error) {
-    console.error('Error in getRecentBookings:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
-    });
+      message: 'Server error generating financial report',
+      error: error.message
+    })
   }
-});
+}
 
-// @desc    Get recent flights
-// @route   GET /api/admin/recent-flights
+// @desc    Get booking analytics
+// @route   GET /api/admin/analytics/bookings
 // @access  Private/Admin
-exports.getRecentFlights = asyncHandler(async (req, res, next) => {
+export const getBookingAnalytics = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 5;
-    
-    const flights = await Flight.find()
-      .sort('-createdAt')
-      .limit(limit);
+    const { days = 30 } = req.query
 
-    res.status(200).json({
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - parseInt(days))
+
+    // Booking trends
+    const bookingTrends = await Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+            day: { $dayOfMonth: '$createdAt' }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
+    ])
+
+    // Status distribution
+    const statusDistribution = await Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ])
+
+    // Cabin class distribution
+    const cabinClassDistribution = await Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$cabinClass',
+          count: { $sum: 1 }
+        }
+      }
+    ])
+
+    res.json({
       success: true,
-      count: flights.length,
-      data: flights
-    });
+      analytics: {
+        bookingTrends,
+        statusDistribution,
+        cabinClassDistribution
+      }
+    })
   } catch (error) {
-    console.error('Error in getRecentFlights:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
-    });
+      message: 'Server error fetching booking analytics',
+      error: error.message
+    })
   }
-});
+}
+
+// @desc    Get user analytics
+// @route   GET /api/admin/analytics/users
+// @access  Private/Admin
+export const getUserAnalytics = async (req, res) => {
+  try {
+    const { days = 365 } = req.query
+
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - parseInt(days))
+
+    // User growth
+    const userGrowth = await User.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ])
+
+    // User activity
+    const userActivity = await Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$user',
+          bookingCount: { $sum: 1 },
+          totalSpent: { $sum: '$totalAmount' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: '$user' },
+      { $sort: { totalSpent: -1 } },
+      { $limit: 10 }
+    ])
+
+    res.json({
+      success: true,
+      analytics: {
+        userGrowth,
+        topUsers: userActivity
+      }
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching user analytics',
+      error: error.message
+    })
+  }
+}

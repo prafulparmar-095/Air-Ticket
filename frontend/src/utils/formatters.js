@@ -1,7 +1,7 @@
 export const formatCurrency = (amount, currency = 'USD') => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: currency
+    currency: currency,
   }).format(amount)
 }
 
@@ -26,4 +26,8 @@ export const formatDuration = (minutes) => {
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
   return `${hours}h ${mins}m`
+}
+
+export const capitalizeFirst = (str) => {
+  return str.charAt(0).toUpperCase() + str.slice(1)
 }

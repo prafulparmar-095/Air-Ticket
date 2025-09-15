@@ -1,19 +1,23 @@
-const express = require('express')
-const User = require('../models/User')
+import express from 'express'
+import {
+  getUsers,
+  getUser,
+  updateUser,
+  deleteUser,
+  getUserStats
+} from '../controllers/userController.js'
+import { authenticate, authorize } from '../middleware/auth.js'
+
 const router = express.Router()
 
-// Get user profile
-router.get('/:id', async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select('-password')
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' })
-    }
-    res.json(user)
-  } catch (error) {
-    console.error('Get user error:', error)
-    res.status(500).json({ message: 'Server error' })
-  }
-})
+router.use(authenticate)
 
-module.exports = router
+router.get('/stats', getUserStats)
+
+// Admin routes
+router.get('/', authorize('admin'), getUsers)
+router.get('/:id', authorize('admin'), getUser)
+router.put('/:id', authorize('admin'), updateUser)
+router.delete('/:id', authorize('admin'), deleteUser)
+
+export default router

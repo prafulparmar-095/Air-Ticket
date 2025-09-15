@@ -1,22 +1,20 @@
-// backend/routes/admin.js
-const express = require('express');
-const {
-  getAdminStats,
-  getAnalytics,
-  getRecentBookings,
-  getRecentFlights
-} = require('../controllers/adminController');
-const { protect, authorize } = require('../middleware/auth');
+import express from 'express'
+import {
+  getDashboardStats,
+  getFinancialReports,
+  getBookingAnalytics,
+  getUserAnalytics
+} from '../controllers/adminController.js'
+import { authenticate, authorize } from '../middleware/auth.js'
 
-const router = express.Router();
+const router = express.Router()
 
-// All admin routes require authentication and admin role
-router.use(protect);
-router.use(authorize('admin'));
+router.use(authenticate)
+router.use(authorize('admin'))
 
-router.get('/stats', getAdminStats);
-router.get('/analytics', getAnalytics);
-router.get('/recent-bookings', getRecentBookings);
-router.get('/recent-flights', getRecentFlights);
+router.get('/stats', getDashboardStats)
+router.get('/reports/financial', getFinancialReports)
+router.get('/analytics/bookings', getBookingAnalytics)
+router.get('/analytics/users', getUserAnalytics)
 
-module.exports = router;
+export default router

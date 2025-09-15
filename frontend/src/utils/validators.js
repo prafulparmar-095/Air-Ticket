@@ -1,6 +1,6 @@
 export const validateEmail = (email) => {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return re.test(email)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
 }
 
 export const validatePassword = (password) => {
@@ -12,26 +12,27 @@ export const validateName = (name) => {
 }
 
 export const validatePhone = (phone) => {
-  const re = /^\+?[1-9]\d{1,14}$/
-  return re.test(phone)
+  const phoneRegex = /^\+?[1-9]\d{1,14}$/
+  return phoneRegex.test(phone)
 }
 
-export const validateCardNumber = (number) => {
-  const re = /^\d{16}$/
-  return re.test(number.replace(/\s/g, ''))
+export const validateDate = (date) => {
+  return date instanceof Date && !isNaN(date)
 }
 
-export const validateExpiryDate = (date) => {
-  const re = /^(0[1-9]|1[0-2])\/?([0-9]{2})$/
-  if (!re.test(date)) return false
+export const validateFlightSearch = (data) => {
+  const errors = {}
   
-  const [month, year] = date.split('/')
-  const expiry = new Date(2000 + parseInt(year), parseInt(month) - 1)
-  const today = new Date()
-  return expiry > today
-}
-
-export const validateCVV = (cvv) => {
-  const re = /^\d{3,4}$/
-  return re.test(cvv)
+  if (!data.origin) errors.origin = 'Origin is required'
+  if (!data.destination) errors.destination = 'Destination is required'
+  if (data.origin === data.destination) errors.destination = 'Origin and destination cannot be the same'
+  if (!data.departureDate) errors.departureDate = 'Departure date is required'
+  if (data.returnDate && new Date(data.returnDate) < new Date(data.departureDate)) {
+    errors.returnDate = 'Return date must be after departure date'
+  }
+  
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors
+  }
 }

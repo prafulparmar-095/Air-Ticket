@@ -5,10 +5,10 @@ import useApi from '../hooks/useApi'
 import { flightsService } from '../services/flights'
 import { bookingsService } from '../services/bookings'
 import LoadingSpinner from '../components/layout/LoadingSpinner'
-import PassengerForm from '../components/booking/PassengerForm'
+import PassengerForm from '../components/booking/BookingSummary'
 import SeatSelection from '../components/booking/SeatSelection'
 import BookingSummary from '../components/booking/BookingSummary'
-import { ArrowLeft, User, Chair, CreditCard } from 'lucide-react'
+import { ArrowLeft, User, Armchair, CreditCard } from 'lucide-react'
 
 const Booking = () => {
   const { flightId } = useParams()

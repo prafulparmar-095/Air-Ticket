@@ -2,145 +2,175 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 
-const transporter = nodemailer.createTransporter({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: false,
+// Create transporter
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
-const templates = {
-  welcome: `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
+// Email templates
+const emailTemplates = {
+  welcome: {
+    subject: 'Welcome to SkyWing Airlines!',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Welcome to SkyWing Airlines</title>
+    <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #1a56db; color: white; padding: 20px; text-align: center; }
-        .content { background: #f9fafb; padding: 20px; }
-        .footer { background: #e5e7eb; padding: 20px; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
+        .header { background: #0066cc; color: white; padding: 20px; text-align: center; }
+        .content { background: #f9f9f9; padding: 20px; }
+        .footer { background: #333; color: white; padding: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
         <div class="header">
-          <h1>Welcome to Air India</h1>
+            <h1>Welcome to SkyWing Airlines!</h1>
         </div>
         <div class="content">
-          <p>Dear {{name}},</p>
-          <p>Thank you for creating an account with Air India! We're excited to have you on board.</p>
-          <p>You can now book flights, manage your bookings, and enjoy exclusive member benefits.</p>
-          <p>Happy travels!</p>
+            <h2>Hello {{firstName}}!</h2>
+            <p>Thank you for registering with SkyWing Airlines. We're excited to have you on board!</p>
+            <p>Your account has been successfully created and you can now start booking flights with us.</p>
+            <p>If you have any questions, please don't hesitate to contact our support team.</p>
         </div>
         <div class="footer">
-          <p>© 2024 Air India. All rights reserved.</p>
+            <p>&copy; 2024 SkyWing Airlines. All rights reserved.</p>
         </div>
-      </div>
-    </body>
-    </html>
-  `,
-  
-  bookingConfirmation: `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #1a56db; color: white; padding: 20px; text-align: center; }
-        .content { background: #f9fafb; padding: 20px; }
-        .footer { background: #e5e7eb; padding: 20px; text-align: center; }
-        .booking-details { background: white; padding: 20px; border-radius: 5px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Flight Booking Confirmed</h1>
-        </div>
-        <div class="content">
-          <p>Dear {{name}},</p>
-          <p>Your flight booking has been confirmed. Here are your booking details:</p>
-          
-          <div class="booking-details">
-            <h3>Booking Reference: {{bookingReference}}</h3>
-            <p><strong>Flight:</strong> {{flightNumber}}</p>
-            <p><strong>From:</strong> {{departure.city}} ({{departure.airport}})</p>
-            <p><strong>To:</strong> {{arrival.city}} ({{arrival.airport}})</p>
-            <p><strong>Total Amount:</strong> ${{totalAmount}}</p>
-          </div>
-          
-          <p>Thank you for choosing Air India!</p>
-        </div>
-        <div class="footer">
-          <p>© 2024 Air India. All rights reserved.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `,
-  
-  passwordReset: `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #1a56db; color: white; padding: 20px; text-align: center; }
-        .content { background: #f9fafb; padding: 20px; }
-        .footer { background: #e5e7eb; padding: 20px; text-align: center; }
-        .button { background: #1a56db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Password Reset Request</h1>
-        </div>
-        <div class="content">
-          <p>Dear {{name}},</p>
-          <p>You requested to reset your password. Click the button below to reset it:</p>
-          <p style="text-align: center;">
-            <a href="{{resetUrl}}" class="button">Reset Password</a>
-          </p>
-          <p>This link will expire in 10 minutes.</p>
-          <p>If you didn't request this, please ignore this email.</p>
-        </div>
-        <div class="footer">
-          <p>© 2024 Air India. All rights reserved.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `
-};
+    </div>
+</body>
+</html>`
+  },
 
-const sendEmail = async ({ email, subject, template, context }) => {
-  try {
-    let html = templates[template];
-    
-    for (const [key, value] of Object.entries(context)) {
-      html = html.replace(new RegExp(`{{${key}}}`, 'g'), value);
-    }
-    
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject,
-      html
-    };
-    
-    await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully to:', email);
-  } catch (error) {
-    console.error('Error sending email:', error);
-    throw new Error('Email could not be sent');
+  bookingConfirmation: {
+    subject: 'Your Flight Booking Confirmation - SkyWing Airlines',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Booking Confirmation</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #0066cc; color: white; padding: 20px; text-align: center; }
+        .content { background: #f9f9f9; padding: 20px; }
+        .booking-details { background: white; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .footer { background: #333; color: white; padding: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Booking Confirmed!</h1>
+        </div>
+        <div class="content">
+            <h2>Hello {{firstName}} {{lastName}},</h2>
+            <p>Your flight booking has been confirmed. Here are your booking details:</p>
+            
+            <div class="booking-details">
+                <h3>Booking Reference: <strong>{{bookingReference}}</strong></h3>
+                <p><strong>Flight:</strong> {{flightNumber}} ({{airline}})</p>
+                <p><strong>Route:</strong> {{origin}} → {{destination}}</p>
+                <p><strong>Departure:</strong> {{departureTime}}</p>
+                <p><strong>Arrival:</strong> {{arrivalTime}}</p>
+                <p><strong>Passengers:</strong> {{passengerCount}}</p>
+                <p><strong>Total Amount:</strong> \${{totalAmount}}</p>
+            </div>
+
+            <p>You can view your booking details and manage your trip from your account dashboard.</p>
+            <p>Safe travels!</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2024 SkyWing Airlines. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>`
+  },
+
+  passwordReset: {
+    subject: 'Password Reset Request - SkyWing Airlines',
+    html: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Password Reset</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #0066cc; color: white; padding: 20px; text-align: center; }
+        .content { background: #f9f9f9; padding: 20px; }
+        .button { background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
+        .footer { background: #333; color: white; padding: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Password Reset</h1>
+        </div>
+        <div class="content">
+            <h2>Hello {{firstName}},</h2>
+            <p>We received a request to reset your password. Click the button below to create a new password:</p>
+            
+            <p style="text-align: center;">
+                <a href="{{resetLink}}" class="button">Reset Password</a>
+            </p>
+            
+            <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
+            <p>This link will expire in 1 hour for security reasons.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2024 SkyWing Airlines. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>`
   }
 };
 
-module.exports = sendEmail;
+// Function to replace template variables
+const replaceTemplateVariables = (template, variables) => {
+  let html = template;
+  for (const [key, value] of Object.entries(variables)) {
+    html = html.replace(new RegExp(`{{${key}}}`, 'g'), value);
+  }
+  return html;
+};
+
+// Send email function
+const sendEmail = async (to, templateName, variables) => {
+  try {
+    const template = emailTemplates[templateName];
+    if (!template) {
+      throw new Error(`Template ${templateName} not found`);
+    }
+
+    const html = replaceTemplateVariables(template.html, variables);
+    const subject = replaceTemplateVariables(template.subject, variables);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to,
+      subject,
+      html,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw error;
+  }
+};
+
+module.exports = {
+  sendEmail,
+  emailTemplates
+};

@@ -19,18 +19,15 @@ import AdminBookings from './pages/Admin/Bookings'
 import AdminAnalytics from './pages/Admin/Analytics'
 import NotFound from './pages/NotFound'
 import ProtectedRoute from './components/shared/ProtectedRoute'
-import AdminRoute from './components/shared/AdminRoute'
-//import LoadingSpinner from './components/layout/LoadingSpinner'
+import AdminRoute from './Shared/AdminRoute'
+import LoadingSpinner from './components/layout/LoadingSpinner'
+import './App.css'
 
 function App() {
   const { loading } = useContext(AuthContext)
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   return (

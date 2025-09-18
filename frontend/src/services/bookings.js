@@ -1,33 +1,13 @@
-import api from './api';
+import api from './api'
 
-export const bookingService = {
-  getBookings: async () => {
-    const response = await api.get('/bookings');
-    return response.data;
-  },
+export const bookingsService = {
+  create: (bookingData) => api.post('/bookings', bookingData),
+  getAll: () => api.get('/bookings'),
+  getById: (id) => api.get(`/bookings/${id}`),
+  getUserBookings: () => api.get('/bookings/user'),
+  update: (id, bookingData) => api.put(`/bookings/${id}`, bookingData),
+  cancel: (id) => api.delete(`/bookings/${id}`),
+  getBookingByFlight: (flightId) => api.get(`/bookings/flight/${flightId}`),
+}
 
-  getBooking: async (id) => {
-    const response = await api.get(`/bookings/${id}`);
-    return response.data;
-  },
-
-  getBookingByReference: async (reference) => {
-    const response = await api.get(`/bookings/reference/${reference}`);
-    return response.data;
-  },
-
-  createBooking: async (bookingData) => {
-    const response = await api.post('/bookings', bookingData);
-    return response.data;
-  },
-
-  updateBooking: async (id, bookingData) => {
-    const response = await api.put(`/bookings/${id}`, bookingData);
-    return response.data;
-  },
-
-  cancelBooking: async (id, reason) => {
-    const response = await api.put(`/bookings/${id}/cancel`, { reason });
-    return response.data;
-  }
-};
+export default bookingsService

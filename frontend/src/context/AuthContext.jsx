@@ -1,7 +1,16 @@
-import { createContext, useState, useEffect } from 'react'
-import { authService } from '../services/auth'
+import { createContext, useState, useEffect, useContext } from 'react'
+import api from '../services/api'
 
 export const AuthContext = createContext()
+
+// Create a custom hook for using the auth context
+export const useAuth = () => {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
@@ -15,7 +24,7 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token')
     if (token) {
       try {
-        const response = await authService.getProfile()
+        const response = await api.get('/auth/me')
         setUser(response.data)
       } catch (error) {
         console.error('Auth check failed:', error)
@@ -27,7 +36,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await authService.login({ email, password })
+      const response = await api.post('/auth/login', { email, password })
       const { user: userData, token } = response.data
       
       localStorage.setItem('token', token)
@@ -44,7 +53,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await authService.register(userData)
+      const response = await api.post('/auth/register', userData)
       const { user: newUser, token } = response.data
       
       localStorage.setItem('token', token)
@@ -66,7 +75,7 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (updatedData) => {
     try {
-      const response = await authService.updateProfile(updatedData)
+      const response = await api.put('/auth/profile', updatedData)
       setUser(response.data)
       return { success: true }
     } catch (error) {

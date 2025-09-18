@@ -1,5 +1,5 @@
 // src/hooks/useAuth.js
 import { useAuth } from '../context/AuthContext'
-
-// ✅ Re-export for convenience
-export { useAuth }
+// This file can be deleted since useAuth is now exported from AuthContext
+// Or you can keep it as a re-export:
+export { useAuth } from '../context/AuthContext'

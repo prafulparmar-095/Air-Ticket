@@ -1,23 +1,10 @@
-import api from './api';
+import api from './api'
 
-export const paymentService = {
-  createPaymentIntent: async (data) => {
-    const response = await api.post('/payments/create-intent', data);
-    return response.data;
-  },
+export const paymentsService = {
+  createIntent: (bookingId) => api.post(`/payments/create-intent/${bookingId}`),
+  confirm: (paymentData) => api.post('/payments/confirm', paymentData),
+  getByBooking: (bookingId) => api.get(`/payments/booking/${bookingId}`),
+  refund: (paymentId) => api.post(`/payments/${paymentId}/refund`),
+}
 
-  confirmPayment: async (data) => {
-    const response = await api.post('/payments/confirm', data);
-    return response.data;
-  },
-
-  getPayment: async (id) => {
-    const response = await api.get(`/payments/${id}`);
-    return response.data;
-  },
-
-  refundPayment: async (data) => {
-    const response = await api.post('/payments/refund', data);
-    return response.data;
-  }
-};
+export default paymentsService

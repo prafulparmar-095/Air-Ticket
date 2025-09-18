@@ -1,40 +1,27 @@
-import { useState, useCallback } from 'react';
+// src/hooks/useApi.js
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 
-const useApi = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+export const useApi = (url, options = {}) => {
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const callApi = useCallback(async (apiCall, ...args) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await apiCall(...args);
-      setData(response);
-      return response;
-    } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'An error occurred';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const response = await axios(url, options);
+        setData(response.data);
+      } catch (err) {
+        setError(err.message || 'An error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const reset = useCallback(() => {
-    setLoading(false);
-    setError(null);
-    setData(null);
-  }, []);
+    fetchData();
+  }, [url, JSON.stringify(options)]);
 
-  return {
-    loading,
-    error,
-    data,
-    callApi,
-    reset
-  };
+  return { data, loading, error };
 };
-
-export default useApi;

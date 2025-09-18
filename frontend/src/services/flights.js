@@ -1,6 +1,7 @@
+// src/services/flights.js
 import api from './api';
 
-export const flightService = {
+export const flightsService = {
   searchFlights: async (searchParams) => {
     const response = await api.get('/flights', { params: searchParams });
     return response.data;

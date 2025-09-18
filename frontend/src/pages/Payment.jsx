@@ -1,180 +1,133 @@
-import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
-import { useApi } from '../hooks/useApi'
-import { CheckCircle, Download, Mail, Calendar, MapPin, Users } from 'lucide-react'
-import { formatDate, formatTime, formatCurrency } from '../utils/formatters'
-import LoadingSpinner from '../components/LoadingSpinner'
+import { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import useApi from '../hooks/useApi'
+import { bookingsService } from '../services/bookings'
+import { paymentsService } from '../services/payments'
+import PaymentForm from '../components/payment/PaymentForm'
+import LoadingSpinner from '../components/layout/LoadingSpinner'
+import { ArrowLeft, CreditCard, Shield, CheckCircle } from 'lucide-react'
 
-const PaymentSuccess = () => {
-  const [booking, setBooking] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const location = useLocation()
+const Payment = () => {
+  const { bookingId } = useParams()
   const navigate = useNavigate()
-  const api = useApi()
+  const [paymentStatus, setPaymentStatus] = useState('pending')
+  const [loading, setLoading] = useState(false)
 
-  const bookingId = location.state?.bookingId
+  const { data: booking, loading: bookingLoading } = useApi(
+    `/bookings/${bookingId}`
+  )
 
-  useEffect(() => {
-    if (!bookingId) {
-      navigate('/')
-      return
-    }
-
-    fetchBooking()
-  }, [bookingId])
-
-  const fetchBooking = async () => {
+  const handlePaymentSubmit = async (paymentData) => {
+    setLoading(true)
     try {
-      const response = await api.get(`/bookings/${bookingId}`)
-      setBooking(response.data.booking)
+      const response = await paymentsService.confirm({
+        bookingId,
+        ...paymentData
+      })
+      
+      if (response.data.status === 'succeeded') {
+        setPaymentStatus('success')
+        // Redirect to success page after 3 seconds
+        setTimeout(() => {
+          navigate(`/booking-confirmation/${bookingId}`)
+        }, 3000)
+      } else {
+        setPaymentStatus('failed')
+      }
     } catch (error) {
-      console.error('Error fetching booking:', error)
+      setPaymentStatus('failed')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDownloadTicket = async () => {
-    try {
-      const response = await api.get(`/bookings/${bookingId}/ticket`, {
-        responseType: 'blob'
-      })
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `ticket-${bookingId}.pdf`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-    } catch (error) {
-      console.error('Error downloading ticket:', error)
-    }
-  }
-
-  const handleEmailTicket = async () => {
-    try {
-      await api.post(`/bookings/${bookingId}/send-ticket`)
-      alert('Ticket has been sent to your email!')
-    } catch (error) {
-      console.error('Error sending ticket:', error)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="large" />
-      </div>
-    )
-  }
-
-  if (!booking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Booking not found</h1>
-          <Link to="/" className="btn-primary">
-            Go Home
-          </Link>
-        </div>
-      </div>
-    )
-  }
+  if (bookingLoading) return <LoadingSpinner />
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-8">
-          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Payment Successful!
-          </h1>
-          <p className="text-gray-600">
-            Your booking has been confirmed. Here are your booking details.
-          </p>
-        </div>
+      <div className="container mx-auto px-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-6"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          Back to Booking
+        </button>
 
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Booking Confirmation</h2>
-              <p className="text-gray-600">Booking ID: {booking._id}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-primary-600">
-                {formatCurrency(booking.totalAmount)}
-              </p>
-              <p className="text-sm text-gray-600">Paid on {formatDate(booking.createdAt)}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-medium mb-3 flex items-center">
-                <MapPin className="h-5 w-5 text-primary-600 mr-2" />
-                Flight Details
-              </h3>
-              <p className="font-semibold">
-                {booking.flight.origin} → {booking.flight.destination}
-              </p>
-              <p className="text-gray-600">{booking.flight.airline} • {booking.flight.flightNumber}</p>
-              <p className="text-gray-600 capitalize">{booking.cabinClass.replace('_', ' ')} Class</p>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-medium mb-3 flex items-center">
-                <Calendar className="h-5 w-5 text-primary-600 mr-2" />
-                Departure
-              </h3>
-              <p className="font-semibold">{formatDate(booking.flight.departureTime)}</p>
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="text-center mb-6">
+              <div className="flex justify-center mb-4">
+                <div className="bg-blue-100 p-3 rounded-full">
+                  <CreditCard className="w-8 h-8 text-blue-600" />
+                </div>
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                Complete Your Payment
+              </h1>
               <p className="text-gray-600">
-                {formatTime(booking.flight.departureTime)} - {formatTime(booking.flight.arrivalTime)}
+                Secure payment processed with bank-level encryption
               </p>
-              <p className="text-gray-600">Duration: {Math.floor(booking.flight.duration / 60)}h {booking.flight.duration % 60}m</p>
             </div>
-          </div>
 
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <h3 className="font-medium mb-3 flex items-center">
-              <Users className="h-5 w-5 text-primary-600 mr-2" />
-              Passengers
-            </h3>
-            <div className="space-y-2">
-              {booking.passengers.map((passenger, index) => (
-                <p key={index} className="text-gray-600">
-                  {passenger.firstName} {passenger.lastName} ({passenger.type})
+            {paymentStatus === 'pending' && (
+              <PaymentForm
+                booking={booking}
+                onSubmit={handlePaymentSubmit}
+                loading={loading}
+              />
+            )}
+
+            {paymentStatus === 'success' && (
+              <div className="text-center py-8">
+                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Payment Successful!
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  Your booking has been confirmed. Redirecting to confirmation page...
                 </p>
-              ))}
+              </div>
+            )}
+
+            {paymentStatus === 'failed' && (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-8 h-8" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Payment Failed
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  There was an issue processing your payment. Please try again.
+                </p>
+                <button
+                  onClick={() => setPaymentStatus('pending')}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-blue-50 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-blue-900 mb-1">
+                  Secure Payment
+                </h3>
+                <p className="text-blue-700 text-sm">
+                  Your payment information is encrypted and secure. We do not store your card details.
+                </p>
+              </div>
             </div>
           </div>
-
-          <div className="flex space-x-4">
-            <button
-              onClick={handleDownloadTicket}
-              className="flex items-center space-x-2 btn-primary"
-            >
-              <Download className="h-5 w-5" />
-              <span>Download Ticket</span>
-            </button>
-            <button
-              onClick={handleEmailTicket}
-              className="flex items-center space-x-2 btn-secondary"
-            >
-              <Mail className="h-5 w-5" />
-              <span>Email Ticket</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="text-center">
-          <Link to="/profile" className="text-primary-600 hover:text-primary-700 font-medium">
-            View all bookings in your profile →
-          </Link>
         </div>
       </div>
     </div>
   )
 }
 
-export default PaymentSuccess
+export default Payment

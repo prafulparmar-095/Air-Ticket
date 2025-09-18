@@ -1,24 +1,22 @@
-import express from 'express'
-import {
-  searchFlights,
+const express = require('express');
+const {
   getFlights,
   getFlight,
   createFlight,
   updateFlight,
-  deleteFlight
-} from '../controllers/flightController.js'
-import { authenticate, authorize } from '../middleware/auth.js'
-import { validateFlightSearch, handleValidationErrors } from '../middleware/validation.js'
+  deleteFlight,
+  getAvailableSeats
+} = require('../controllers/flightController');
+const { protect, admin } = require('../middleware/auth');
 
-const router = express.Router()
+const router = express.Router();
 
-router.get('/search', validateFlightSearch, handleValidationErrors, searchFlights)
-router.get('/', getFlights)
-router.get('/:id', getFlight)
+router.get('/', getFlights);
+router.get('/:id', getFlight);
+router.get('/:id/seats', getAvailableSeats);
 
-// Admin routes
-router.post('/', authenticate, authorize('admin'), createFlight)
-router.put('/:id', authenticate, authorize('admin'), updateFlight)
-router.delete('/:id', authenticate, authorize('admin'), deleteFlight)
+router.post('/', protect, admin, createFlight);
+router.put('/:id', protect, admin, updateFlight);
+router.delete('/:id', protect, admin, deleteFlight);
 
-export default router
+module.exports = router;

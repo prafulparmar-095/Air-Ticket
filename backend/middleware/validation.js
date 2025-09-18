@@ -1,97 +1,141 @@
-import { body, validationResult } from 'express-validator'
+const { body, validationResult } = require('express-validator');
 
-export const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req)
+const handleValidationErrors = (req, res, next) => {
+  const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
-      message: 'Validation failed',
       errors: errors.array()
-    })
+    });
   }
-  next()
-}
+  next();
+};
 
-// User validation rules
-export const validateUserRegistration = [
-  body('name')
+const registerValidation = [
+  body('firstName')
     .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Name must be between 2 and 50 characters'),
+    .isLength({ min: 2 })
+    .withMessage('First name must be at least 2 characters long'),
+  body('lastName')
+    .trim()
+    .isLength({ min: 2 })
+    .withMessage('Last name must be at least 2 characters long'),
   body('email')
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
-  body('phone')
-    .matches(/^\+?[1-9]\d{1,14}$/)
-    .withMessage('Please provide a valid phone number'),
   body('password')
     .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long')
-]
+    .withMessage('Password must be at least 6 characters long'),
+  body('phone')
+    .isMobilePhone()
+    .withMessage('Please provide a valid phone number'),
+  body('dateOfBirth')
+    .isDate()
+    .withMessage('Please provide a valid date of birth'),
+  handleValidationErrors
+];
 
-export const validateUserLogin = [
+const loginValidation = [
   body('email')
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
   body('password')
     .notEmpty()
-    .withMessage('Password is required')
-]
+    .withMessage('Password is required'),
+  handleValidationErrors
+];
 
-// Flight search validation
-export const validateFlightSearch = [
-  body('origin')
-    .trim()
+const flightValidation = [
+  body('flightNumber')
     .notEmpty()
-    .withMessage('Origin is required'),
-  body('destination')
-    .trim()
+    .withMessage('Flight number is required'),
+  body('airline')
     .notEmpty()
-    .withMessage('Destination is required'),
-  body('departureDate')
+    .withMessage('Airline is required'),
+  body('departure.airport')
+    .notEmpty()
+    .withMessage('Departure airport is required'),
+  body('departure.datetime')
     .isISO8601()
-    .withMessage('Please provide a valid departure date'),
-  body('returnDate')
-    .optional()
+    .withMessage('Valid departure datetime is required'),
+  body('departure.city')
+    .notEmpty()
+    .withMessage('Departure city is required'),
+  body('arrival.airport')
+    .notEmpty()
+    .withMessage('Arrival airport is required'),
+  body('arrival.datetime')
     .isISO8601()
-    .withMessage('Please provide a valid return date')
-    .custom((value, { req }) => {
-      if (new Date(value) < new Date(req.body.departureDate)) {
-        throw new Error('Return date must be after departure date')
-      }
-      return true
-    })
-]
+    .withMessage('Valid arrival datetime is required'),
+  body('arrival.city')
+    .notEmpty()
+    .withMessage('Arrival city is required'),
+  body('duration')
+    .isInt({ min: 1 })
+    .withMessage('Duration must be a positive number'),
+  body('aircraft')
+    .notEmpty()
+    .withMessage('Aircraft is required'),
+  body('prices.economy')
+    .isFloat({ min: 0 })
+    .withMessage('Economy price must be a positive number'),
+  body('prices.business')
+    .isFloat({ min: 0 })
+    .withMessage('Business price must be a positive number'),
+  body('prices.first')
+    .isFloat({ min: 0 })
+    .withMessage('First class price must be a positive number'),
+  handleValidationErrors
+];
 
-// Booking validation
-export const validateBooking = [
+const bookingValidation = [
   body('flightId')
     .isMongoId()
-    .withMessage('Please provide a valid flight ID'),
+    .withMessage('Valid flight ID is required'),
   body('passengers')
     .isArray({ min: 1 })
     .withMessage('At least one passenger is required'),
   body('passengers.*.firstName')
-    .trim()
     .notEmpty()
     .withMessage('Passenger first name is required'),
   body('passengers.*.lastName')
-    .trim()
     .notEmpty()
     .withMessage('Passenger last name is required'),
-  body('passengers.*.gender')
-    .isIn(['male', 'female', 'other'])
-    .withMessage('Please provide a valid gender'),
   body('passengers.*.dateOfBirth')
-    .isISO8601()
-    .withMessage('Please provide a valid date of birth'),
-  body('contactInfo.email')
+    .isDate()
+    .withMessage('Valid passenger date of birth is required'),
+  body('passengers.*.seat.number')
+    .notEmpty()
+    .withMessage('Seat number is required'),
+  body('passengers.*.seat.class')
+    .isIn(['economy', 'business', 'first'])
+    .withMessage('Valid seat class is required'),
+  body('contactEmail')
     .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email'),
-  body('contactInfo.phone')
-    .matches(/^\+?[1-9]\d{1,14}$/)
-    .withMessage('Please provide a valid phone number')
-]
+    .withMessage('Valid contact email is required'),
+  body('contactPhone')
+    .isMobilePhone()
+    .withMessage('Valid contact phone is required'),
+  handleValidationErrors
+];
+
+const paymentValidation = [
+  body('bookingId')
+    .isMongoId()
+    .withMessage('Valid booking ID is required'),
+  body('paymentMethod')
+    .isIn(['credit_card', 'debit_card', 'paypal', 'bank_transfer'])
+    .withMessage('Valid payment method is required'),
+  handleValidationErrors
+];
+
+module.exports = {
+  registerValidation,
+  loginValidation,
+  flightValidation,
+  bookingValidation,
+  paymentValidation,
+  handleValidationErrors
+};

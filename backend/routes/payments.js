@@ -1,19 +1,19 @@
-import express from 'express'
-import {
+const express = require('express');
+const {
   createPaymentIntent,
   confirmPayment,
-  getPaymentHistory,
-  processRefund
-} from '../controllers/paymentController.js'
-import { authenticate, authorize } from '../middleware/auth.js'
+  getPayment,
+  refundPayment
+} = require('../controllers/paymentController');
+const { protect } = require('../middleware/auth');
 
-const router = express.Router()
+const router = express.Router();
 
-router.use(authenticate)
+router.use(protect);
 
-router.post('/create-intent', createPaymentIntent)
-router.post('/confirm', confirmPayment)
-router.get('/history', getPaymentHistory)
-router.post('/refund', authorize('admin'), processRefund)
+router.post('/create-intent', createPaymentIntent);
+router.post('/confirm', confirmPayment);
+router.get('/:id', getPayment);
+router.post('/refund', refundPayment);
 
-export default router
+module.exports = router;

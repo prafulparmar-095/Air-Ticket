@@ -1,20 +1,22 @@
-import express from 'express'
-import {
+const express = require('express');
+const {
   getDashboardStats,
-  getFinancialReports,
-  getBookingAnalytics,
-  getUserAnalytics
-} from '../controllers/adminController.js'
-import { authenticate, authorize } from '../middleware/auth.js'
+  getUsers,
+  updateUserRole,
+  getBookings,
+  updateBookingStatus
+} = require('../controllers/adminController');
+const { protect, admin } = require('../middleware/auth');
 
-const router = express.Router()
+const router = express.Router();
 
-router.use(authenticate)
-router.use(authorize('admin'))
+router.use(protect);
+router.use(admin);
 
-router.get('/stats', getDashboardStats)
-router.get('/reports/financial', getFinancialReports)
-router.get('/analytics/bookings', getBookingAnalytics)
-router.get('/analytics/users', getUserAnalytics)
+router.get('/dashboard/stats', getDashboardStats);
+router.get('/users', getUsers);
+router.put('/users/:userId/role', updateUserRole);
+router.get('/bookings', getBookings);
+router.put('/bookings/:bookingId/status', updateBookingStatus);
 
-export default router
+module.exports = router;

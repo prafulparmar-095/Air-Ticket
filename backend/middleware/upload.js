@@ -1,33 +1,33 @@
-import multer from 'multer'
-import path from 'path'
+const multer = require('multer');
+const path = require('path');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/')
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+// Configure Cloudinary storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'airticket',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif'],
+    transformation: [{ width: 500, height: 500, crop: 'limit' }]
   }
-})
+});
 
-// File filter
 const fileFilter = (req, file, cb) => {
+  // Check file type
   if (file.mimetype.startsWith('image/')) {
-    cb(null, true)
+    cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed'), false)
+    cb(new Error('Not an image! Please upload only images.'), false);
   }
-}
+};
 
-// Configure multer
 const upload = multer({
   storage,
-  fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
-})
+    fileSize: parseInt(process.env.UPLOAD_MAX_SIZE) || 5 * 1024 * 1024 // 5MB
+  },
+  fileFilter
+});
 
-export default upload
+module.exports = upload;

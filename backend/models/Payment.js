@@ -1,4 +1,4 @@
-import mongoose from 'mongoose'
+const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
   booking: {
@@ -13,58 +13,49 @@ const paymentSchema = new mongoose.Schema({
   },
   amount: {
     type: Number,
-    required: [true, 'Amount is required'],
-    min: [0, 'Amount cannot be negative']
+    required: true
   },
   currency: {
     type: String,
-    default: 'USD',
-    uppercase: true
-  },
-  paymentIntentId: {
-    type: String,
-    required: true,
-    unique: true
+    default: 'USD'
   },
   paymentMethod: {
     type: String,
+    enum: ['credit_card', 'debit_card', 'paypal', 'bank_transfer'],
     required: true
   },
-  status: {
+  paymentStatus: {
     type: String,
-    enum: ['pending', 'succeeded', 'failed', 'refunded'],
+    enum: ['pending', 'completed', 'failed', 'refunded'],
     default: 'pending'
+  },
+  transactionId: {
+    type: String,
+    unique: true
+  },
+  paymentGateway: {
+    type: String,
+    enum: ['stripe', 'paypal', 'razorpay'],
+    required: true
+  },
+  paymentGatewayResponse: {
+    type: mongoose.Schema.Types.Mixed
   },
   refundAmount: {
     type: Number,
-    default: 0,
-    min: [0, 'Refund amount cannot be negative']
+    default: 0
   },
-  refundReason: {
-    type: String,
-    trim: true
-  },
-  metadata: {
-    type: Map,
-    of: String
-  }
+  refundReason: String,
+  refundedAt: Date
 }, {
   timestamps: true
-})
+});
 
-// Index for user payments and booking payments
-paymentSchema.index({ user: 1, createdAt: -1 })
-paymentSchema.index({ booking: 1 })
-paymentSchema.index({ paymentIntentId: 1 })
+paymentSchema.pre('save', async function(next) {
+  if (this.isNew && !this.transactionId) {
+    this.transactionId = 'TXN' + Date.now() + Math.random().toString(36).substr(2, 5).toUpperCase();
+  }
+  next();
+});
 
-// Virtual for formatted amount
-paymentSchema.virtual('formattedAmount').get(function() {
-  return (this.amount / 100).toFixed(2) // Assuming amount is in cents
-})
-
-// Method to check if payment can be refunded
-paymentSchema.methods.canBeRefunded = function() {
-  return this.status === 'succeeded' && this.refundAmount < this.amount
-}
-
-export default mongoose.model('Payment', paymentSchema)
+module.exports = mongoose.model('Payment', paymentSchema);

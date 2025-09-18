@@ -1,24 +1,37 @@
-import express from 'express'
-import {
-  createBooking,
-  getUserBookings,
+const express = require('express');
+const {
+  getBookings,
   getBooking,
+  createBooking,
+  updateBooking,
   cancelBooking,
-  getAllBookings
-} from '../controllers/bookingController.js'
-import { authenticate, authorize } from '../middleware/auth.js'
-import { validateBooking, handleValidationErrors } from '../middleware/validation.js'
+  getBookingByReference
+} = require('../controllers/bookingController');
+const { protect } = require('../middleware/auth');
+const { bookingValidation } = require('../middleware/validation');
+const asyncHandler = require('../middleware/asyncHandler');
 
-const router = express.Router()
+const router = express.Router();
 
-router.use(authenticate)
+// Protect all routes
+router.use(protect);
 
-router.post('/', validateBooking, handleValidationErrors, createBooking)
-router.get('/my-bookings', getUserBookings)
-router.get('/:id', getBooking)
-router.put('/:id/cancel', cancelBooking)
+// GET /api/bookings - Get user's bookings
+router.get('/', asyncHandler(getBookings));
 
-// Admin routes
-router.get('/', authorize('admin'), getAllBookings)
+// GET /api/bookings/:id - Get single booking
+router.get('/:id', asyncHandler(getBooking));
 
-export default router
+// GET /api/bookings/reference/:reference - Get booking by reference number
+router.get('/reference/:reference', asyncHandler(getBookingByReference));
+
+// POST /api/bookings - Create new booking
+router.post('/', bookingValidation, asyncHandler(createBooking));
+
+// PUT /api/bookings/:id - Update booking
+router.put('/:id', asyncHandler(updateBooking));
+
+// PUT /api/bookings/:id/cancel - Cancel booking
+router.put('/:id/cancel', asyncHandler(cancelBooking));
+
+module.exports = router;

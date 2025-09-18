@@ -1,28 +1,40 @@
-import axios from 'axios'
+import { useState, useCallback } from 'react';
 
-export const useApi = () => {
-  const api = axios.create({
-    baseURL: '/api',
-  })
+const useApi = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [data, setData] = useState(null);
 
-  api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+  const callApi = useCallback(async (apiCall, ...args) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiCall(...args);
+      setData(response);
+      return response;
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.message || 'An error occurred';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
     }
-    return config
-  })
+  }, []);
 
-  api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token')
-        window.location.href = '/login'
-      }
-      return Promise.reject(error)
-    }
-  )
+  const reset = useCallback(() => {
+    setLoading(false);
+    setError(null);
+    setData(null);
+  }, []);
 
-  return api
-}
+  return {
+    loading,
+    error,
+    data,
+    callApi,
+    reset
+  };
+};
+
+export default useApi;

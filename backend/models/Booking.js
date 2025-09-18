@@ -1,44 +1,36 @@
-import mongoose from 'mongoose'
+const mongoose = require('mongoose');
 
 const passengerSchema = new mongoose.Schema({
-  type: {
-    type: String,
-    enum: ['adult', 'child', 'infant'],
-    required: true
-  },
   firstName: {
     type: String,
-    required: [true, 'First name is required'],
-    trim: true
+    required: true
   },
   lastName: {
     type: String,
-    required: [true, 'Last name is required'],
-    trim: true
-  },
-  gender: {
-    type: String,
-    enum: ['male', 'female', 'other'],
     required: true
   },
   dateOfBirth: {
     type: Date,
     required: true
   },
-  passportNumber: {
+  gender: {
     type: String,
-    trim: true
+    enum: ['male', 'female', 'other']
   },
-  passportExpiry: {
-    type: Date
+  passportNumber: String,
+  nationality: String,
+  seat: {
+    number: String,
+    class: String,
+    price: Number
   }
-})
+});
 
 const bookingSchema = new mongoose.Schema({
   bookingReference: {
     type: String,
-    unique: true,
-    required: true
+    required: true,
+    unique: true
   },
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -51,30 +43,13 @@ const bookingSchema = new mongoose.Schema({
     required: true
   },
   passengers: [passengerSchema],
-  contactInfo: {
-    email: {
-      type: String,
-      required: [true, 'Email is required'],
-      lowercase: true
-    },
-    phone: {
-      type: String,
-      required: [true, 'Phone number is required']
-    }
-  },
-  cabinClass: {
-    type: String,
-    enum: ['economy', 'premium_economy', 'business', 'first'],
-    required: true
-  },
   totalAmount: {
     type: Number,
-    required: [true, 'Total amount is required'],
-    min: [0, 'Total amount cannot be negative']
+    required: true
   },
-  status: {
+  bookingStatus: {
     type: String,
-    enum: ['pending', 'confirmed', 'cancelled', 'refunded'],
+    enum: ['pending', 'confirmed', 'cancelled', 'completed'],
     default: 'pending'
   },
   paymentStatus: {
@@ -82,48 +57,26 @@ const bookingSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed', 'refunded'],
     default: 'pending'
   },
-  paymentIntentId: {
-    type: String
-  },
-  cancellationReason: {
+  contactEmail: {
     type: String,
-    trim: true
+    required: true
   },
-  cancelledAt: {
-    type: Date
-  },
-  seatNumbers: [{
+  contactPhone: {
     type: String,
-    trim: true
-  }]
+    required: true
+  },
+  specialRequests: String,
+  cancellationReason: String,
+  cancelledAt: Date
 }, {
   timestamps: true
-})
+});
 
-// Generate booking reference before saving
 bookingSchema.pre('save', async function(next) {
-  if (this.isNew && !this.bookingReference) {
-    const count = await mongoose.model('Booking').countDocuments()
-    this.bookingReference = `BK${(count + 1).toString().padStart(6, '0')}`
+  if (this.isNew) {
+    this.bookingReference = 'AIR' + Math.random().toString(36).substr(2, 9).toUpperCase();
   }
-  next()
-})
+  next();
+});
 
-// Index for user bookings
-bookingSchema.index({ user: 1, createdAt: -1 })
-bookingSchema.index({ bookingReference: 1 })
-
-// Virtual for passenger count
-bookingSchema.virtual('passengerCount').get(function() {
-  return this.passengers.length
-})
-
-// Method to check if booking can be cancelled
-bookingSchema.methods.canBeCancelled = function() {
-  const departureTime = new Date(this.flight.departureTime)
-  const now = new Date()
-  const hoursUntilDeparture = (departureTime - now) / (1000 * 60 * 60)
-  return hoursUntilDeparture > 24 // Can cancel if more than 24 hours before departure
-}
-
-export default mongoose.model('Booking', bookingSchema)
+module.exports = mongoose.model('Booking', bookingSchema);

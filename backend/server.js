@@ -1,65 +1,60 @@
-import express from 'express'
-import cors from 'cors'
-import dotenv from 'dotenv'
-import mongoose from 'mongoose'
-import rateLimit from 'express-rate-limit'
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const connectDB = require('./config/database');
+const errorHandler = require('./middleware/errorHandler');
+const { apiLimiter } = require('./middleware/rateLimiter');
+const seedDatabase = require('./utils/seedDatabase');
 
-import authRoutes from './routes/auth.js'
-import flightRoutes from './routes/flights.js'
-import bookingRoutes from './routes/bookings.js'
-import paymentRoutes from './routes/payments.js'
-import userRoutes from './routes/users.js'
-import adminRoutes from './routes/admin.js'
+// Load env vars
+dotenv.config();
 
-import { errorHandler } from './middleware/errorHandler.js'
+// Connect to database
+connectDB();
 
-dotenv.config()
+// Seed database if in development
+if (process.env.NODE_ENV === 'development') {
+  seedDatabase();
+}
 
-const app = express()
-const PORT = process.env.PORT || 5000
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-})
+const app = express();
 
 // Middleware
-app.use(limiter)
-app.use(cors())
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Rate limiting
+app.use('/api/', apiLimiter);
 
 // Routes
-app.use('/api/auth', authRoutes)
-app.use('/api/flights', flightRoutes)
-app.use('/api/bookings', bookingRoutes)
-app.use('/api/payments', paymentRoutes)
-app.use('/api/users', userRoutes)
-app.use('/api/admin', adminRoutes)
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/flights', require('./routes/flights'));
+app.use('/api/bookings', require('./routes/bookings'));
+app.use('/api/payments', require('./routes/payments'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/webhooks', require('./routes/webhooks'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ message: 'Server is running successfully' })
-})
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    version: '1.0.0'
+  });
+});
 
 // Error handling middleware
-app.use(errorHandler)
+app.use(errorHandler);
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('Connected to MongoDB')
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`)
-  })
-})
-.catch((error) => {
-  console.error('MongoDB connection error:', error)
-  process.exit(1)
-})
+const PORT = process.env.PORT || 5000;
 
-export default app
+app.listen(PORT, () => {
+  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+});

@@ -1,24 +1,22 @@
-import express from 'express'
-import {
+const express = require('express');
+const {
   register,
   login,
-  getMe,
+  getProfile,
   updateProfile,
-  changePassword
-} from '../controllers/authController.js'
-import { authenticate } from '../middleware/auth.js'
-import {
-  validateUserRegistration,
-  validateUserLogin,
-  handleValidationErrors
-} from '../middleware/validation.js'
+  forgotPassword,
+  resetPassword
+} = require('../controllers/authController');
+const { protect } = require('../middleware/auth');
+const { authLimiter } = require('../middleware/rateLimiter');
 
-const router = express.Router()
+const router = express.Router();
 
-router.post('/register', validateUserRegistration, handleValidationErrors, register)
-router.post('/login', validateUserLogin, handleValidationErrors, login)
-router.get('/me', authenticate, getMe)
-router.put('/profile', authenticate, updateProfile)
-router.put('/change-password', authenticate, changePassword)
+router.post('/register', authLimiter, register);
+router.post('/login', authLimiter, login);
+router.get('/profile', protect, getProfile);
+router.put('/profile', protect, updateProfile);
+router.post('/forgotpassword', forgotPassword);
+router.put('/resetpassword/:resettoken', resetPassword);
 
-export default router
+module.exports = router;

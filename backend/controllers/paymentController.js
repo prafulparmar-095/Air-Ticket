@@ -1,211 +1,161 @@
-import stripe from '../config/stripe.js'
-import Booking from '../models/Booking.js'
-import Payment from '../models/Payment.js'
+const Payment = require('../models/Payment');
+const Booking = require('../models/Booking');
+const stripe = require('../config/stripe');
+const sendEmail = require('../utils/emailService');
 
-// @desc    Create payment intent
-// @route   POST /api/payments/create-intent
-// @access  Private
-export const createPaymentIntent = async (req, res) => {
+const createPaymentIntent = async (req, res) => {
   try {
-    const { amount, bookingId } = req.body
-
-    // Verify booking exists and belongs to user
-    const booking = await Booking.findOne({
-      _id: bookingId,
-      user: req.user.id
-    })
-
+    const { bookingId, paymentMethod } = req.body;
+    
+    const booking = await Booking.findById(bookingId).populate('flight');
+    
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      })
+      return res.status(404).json({ message: 'Booking not found' });
     }
-
-    if (booking.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Booking is not in a payable state'
-      })
+    
+    if (booking.paymentStatus === 'paid') {
+      return res.status(400).json({ message: 'Booking already paid' });
     }
-
-    // Create payment intent (using mock in development)
+    
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
+      amount: Math.round(booking.totalAmount * 100),
       currency: 'usd',
+      payment_method_types: ['card'],
       metadata: {
         bookingId: booking._id.toString(),
-        userId: req.user.id
+        userId: req.user._id.toString()
       }
-    })
-
-    res.json({
-      success: true,
-      clientSecret: paymentIntent.client_secret
-    })
-  } catch (error) {
-    console.error('Payment intent error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error creating payment intent',
-      error: error.message
-    })
-  }
-}
-
-// @desc    Confirm payment
-// @route   POST /api/payments/confirm
-// @access  Private
-export const confirmPayment = async (req, res) => {
-  try {
-    const { paymentIntentId, bookingId } = req.body
-
-    // For mock payments, we'll simulate success
-    let paymentIntent;
+    });
     
-    if (paymentIntentId && paymentIntentId.startsWith('pi_mock_')) {
-      // Mock payment - always succeed
-      paymentIntent = {
-        status: 'succeeded',
-        id: paymentIntentId,
-        payment_method_types: ['card']
-      };
-    } else {
-      // Real Stripe payment
-      paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    }
-
-    if (paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment not successful'
-      })
-    }
-
-    // Verify booking exists and belongs to user
-    const booking = await Booking.findOne({
-      _id: bookingId,
-      user: req.user.id
-    }).populate('flight')
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      })
-    }
-
-    // Update booking status
-    booking.status = 'confirmed'
-    booking.paymentStatus = 'paid'
-    booking.paymentIntentId = paymentIntentId
-    await booking.save()
-
-    // Create payment record
-    await Payment.create({
+    const payment = await Payment.create({
       booking: bookingId,
-      user: req.user.id,
+      user: req.user._id,
       amount: booking.totalAmount,
-      currency: 'usd',
-      paymentIntentId: paymentIntentId,
-      paymentMethod: 'card',
-      status: 'succeeded'
-    })
-
-    res.json({
-      success: true,
-      message: 'Payment confirmed successfully',
-      booking
-    })
-  } catch (error) {
-    console.error('Payment confirmation error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error confirming payment',
-      error: error.message
-    })
-  }
-}
-
-// @desc    Get payment history
-// @route   GET /api/payments/history
-// @access  Private
-export const getPaymentHistory = async (req, res) => {
-  try {
-    const payments = await Payment.find({ user: req.user.id })
-      .populate('booking')
-      .sort({ createdAt: -1 })
-
-    res.json({
-      success: true,
-      count: payments.length,
-      payments
-    })
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error fetching payment history',
-      error: error.message
-    })
-  }
-}
-
-// @desc    Process refund
-// @route   POST /api/payments/refund
-// @access  Private/Admin
-export const processRefund = async (req, res) => {
-  try {
-    const { bookingId, amount, reason } = req.body
-
-    const booking = await Booking.findById(bookingId)
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      })
-    }
-
-    if (!booking.paymentIntentId) {
-      return res.status(400).json({
-        success: false,
-        message: 'No payment found for this booking'
-      })
-    }
-
-    // Create refund
-    const refund = await stripe.refunds.create({
-      payment_intent: booking.paymentIntentId,
-      amount: Math.round(amount * 100)
-    })
-
-    // Update booking status
-    booking.paymentStatus = 'refunded'
-    if (amount === booking.totalAmount) {
-      booking.status = 'refunded'
-    }
-    await booking.save()
-
-    // Update payment record
-    await Payment.findOneAndUpdate(
-      { paymentIntentId: booking.paymentIntentId },
-      {
-        status: 'refunded',
-        refundAmount: amount,
-        refundReason: reason
+      paymentMethod,
+      paymentGateway: 'stripe',
+      paymentGatewayResponse: {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id
       }
-    )
-
+    });
+    
     res.json({
-      success: true,
-      message: 'Refund processed successfully',
-      refund
-    })
+      clientSecret: paymentIntent.client_secret,
+      paymentId: payment._id
+    });
   } catch (error) {
-    console.error('Refund error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error processing refund',
-      error: error.message
-    })
+    res.status(500).json({ message: error.message });
   }
-}
+};
+
+const confirmPayment = async (req, res) => {
+  try {
+    const { paymentId, paymentIntentId } = req.body;
+    
+    const payment = await Payment.findById(paymentId);
+    
+    if (!payment) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+    
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    
+    if (paymentIntent.status === 'succeeded') {
+      payment.paymentStatus = 'completed';
+      payment.paymentGatewayResponse = {
+        ...payment.paymentGatewayResponse,
+        paymentIntent
+      };
+      await payment.save();
+      
+      await Booking.findByIdAndUpdate(payment.booking, {
+        paymentStatus: 'paid',
+        bookingStatus: 'confirmed'
+      });
+      
+      const booking = await Booking.findById(payment.booking)
+        .populate('flight')
+        .populate('user');
+      
+      await sendEmail({
+        email: booking.user.email,
+        subject: 'Flight Booking Confirmation',
+        template: 'bookingConfirmation',
+        context: {
+          name: booking.user.firstName,
+          bookingReference: booking.bookingReference,
+          flightNumber: booking.flight.flightNumber,
+          departure: booking.flight.departure,
+          arrival: booking.flight.arrival,
+          totalAmount: booking.totalAmount
+        }
+      });
+      
+      res.json({ message: 'Payment successful', payment });
+    } else {
+      res.status(400).json({ message: 'Payment not completed' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const getPayment = async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id)
+      .populate('booking')
+      .populate('user');
+    
+    if (!payment) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+    
+    res.json(payment);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const refundPayment = async (req, res) => {
+  try {
+    const { paymentId, reason } = req.body;
+    
+    const payment = await Payment.findById(paymentId);
+    
+    if (!payment) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+    
+    if (payment.paymentStatus !== 'completed') {
+      return res.status(400).json({ message: 'Only completed payments can be refunded' });
+    }
+    
+    const refund = await stripe.refunds.create({
+      payment_intent: payment.paymentGatewayResponse.paymentIntentId,
+      amount: Math.round(payment.amount * 100)
+    });
+    
+    payment.paymentStatus = 'refunded';
+    payment.refundAmount = payment.amount;
+    payment.refundReason = reason;
+    payment.refundedAt = new Date();
+    await payment.save();
+    
+    await Booking.findByIdAndUpdate(payment.booking, {
+      bookingStatus: 'cancelled',
+      cancellationReason: reason,
+      cancelledAt: new Date()
+    });
+    
+    res.json({ message: 'Refund processed successfully', refund });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = {
+  createPaymentIntent,
+  confirmPayment,
+  getPayment,
+  refundPayment
+};

@@ -1,23 +1,24 @@
-import express from 'express'
-import {
+const express = require('express');
+const {
   getUsers,
   getUser,
   updateUser,
   deleteUser,
-  getUserStats
-} from '../controllers/userController.js'
-import { authenticate, authorize } from '../middleware/auth.js'
+  getUserBookings,
+  uploadProfileImage
+} = require('../controllers/userController');
+const { protect, admin } = require('../middleware/auth');
+const upload = require('../middleware/upload');
 
-const router = express.Router()
+const router = express.Router();
 
-router.use(authenticate)
+router.use(protect);
 
-router.get('/stats', getUserStats)
+router.get('/', admin, getUsers);
+router.get('/:id', admin, getUser);
+router.put('/:id', admin, updateUser);
+router.delete('/:id', admin, deleteUser);
+router.get('/:id/bookings', admin, getUserBookings);
+router.post('/upload-profile', upload.single('image'), uploadProfileImage);
 
-// Admin routes
-router.get('/', authorize('admin'), getUsers)
-router.get('/:id', authorize('admin'), getUser)
-router.put('/:id', authorize('admin'), updateUser)
-router.delete('/:id', authorize('admin'), deleteUser)
-
-export default router
+module.exports = router;

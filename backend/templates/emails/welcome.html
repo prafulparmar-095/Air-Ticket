@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; }
+    .header { background: #1a56db; color: white; padding: 20px; text-align: center; }
+    .content { background: #f9fafb; padding: 20px; }
+    .footer { background: #e5e7eb; padding: 20px; text-align: center; font-size: 12px; }
+    .features { margin: 20px 0; }
+    .feature-item { display: flex; align-items: center; margin: 10px 0; }
+    .feature-icon { font-size: 24px; margin-right: 15px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Welcome to Air India</h1>
+  </div>
+  
+  <div class="content">
+    <p>Dear {{name}},</p>
+    <p>Welcome aboard! Thank you for creating an account with Air India. We're excited to have you as part of our flying family.</p>
+    
+    <div class="features">
+      <h3>With your account, you can:</h3>
+      
+      <div class="feature-item">
+        <span class="feature-icon">✈️</span>
+        <span>Book flights to over 100 destinations worldwide</span>
+      </div>
+      
+      <div class="feature-item">
+        <span class="feature-icon">📱</span>
+        <span>Manage your bookings online 24/7</span>
+      </div>
+      
+      <div class="feature-item">
+        <span class="feature-icon">⭐</span>
+        <span>Earn and redeem loyalty points with our frequent flyer program</span>
+      </div>
+      
+      <div class="feature-item">
+        <span class="feature-icon">🔔</span>
+        <span>Receive flight status updates and special offers</span>
+      </div>
+    </div>
+    
+    <p>Ready to plan your next journey? <a href="{{bookingUrl}}">Start exploring our destinations</a> and book your next flight.</p>
+    
+    <p>Happy travels!</p>
+    <p>The Air India Team</p>
+  </div>
+  
+  <div class="footer">
+    <p>© 2024 Air India. All rights reserved.</p>
+    <p>For assistance, contact: support@airindia.com or call +1-800-AIR-INDIA</p>
+  </div>
+</body>
+</html>
